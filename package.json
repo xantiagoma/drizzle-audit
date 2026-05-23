@@ -234,6 +234,7 @@
     "check": "vp lint && vp fmt --check && tsc --noEmit",
     "release": "changelogen --release && bun run build && npm publish",
     "changelog": "changelogen",
+    "prepare": "husky",
     "example:basic": "bun examples/basic/server.ts",
     "example:mongo": "bun examples/mongo/server.ts",
     "example:express": "bun examples/express-mysql-sqlite/server.ts"
@@ -249,6 +250,7 @@
     "express": "^5.2.1",
     "get-port-please": "^3.2.0",
     "hono": "^4.12.22",
+    "husky": "^9.1.7",
     "mongodb": "^7.2.0",
     "mongodb-memory-server": "^11.1.0",
     "mysql-memory-server": "^1.14.1",

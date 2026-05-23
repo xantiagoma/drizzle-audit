@@ -15,6 +15,9 @@ export default defineConfig({
     ignorePatterns: ["tmp/**", "dist/**"],
   },
   fmt: {},
+  staged: {
+    "*.ts": ["vp fmt", "vp lint"],
+  },
   pack: {
     entry: [
       "src/index.ts",
