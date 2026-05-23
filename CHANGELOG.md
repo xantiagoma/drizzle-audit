@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.6
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.5...v0.1.6)
+
+### 🩹 Fixes
+
+- SQLite Date binding + sync interception support ([8ef7452](https://github.com/xantiagoma/drizzle-audit/commit/8ef7452))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.5
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.4...v0.1.5)
