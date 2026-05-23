@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.8
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.7...v0.1.8)
+
+### 🚀 Enhancements
+
+- Async shouldAudit support ([d341c00](https://github.com/xantiagoma/drizzle-audit/commit/d341c00))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.7
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.6...v0.1.7)
