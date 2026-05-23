@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.9
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.8...v0.1.9)
+
+### 🚀 Enhancements
+
+- OnEntry hook, Drizzle v1 compat, CI improvements ([0811b03](https://github.com/xantiagoma/drizzle-audit/commit/0811b03))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.8
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.7...v0.1.8)
