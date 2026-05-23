@@ -93,12 +93,16 @@ db.$audit.action({ action: "LOGIN", userId: email }); // fire-and-forget
   using t = db.$audit.track({ action: "PROCESS_ORDER" }); /* ... */
 }
 
-// Context
-await db.$audit.withContext({ userId: "u_1", metadata: { ip } }, async () => {
+// Context (withContext merges, newContext replaces)
+await db.$audit.withContext({ metadata: { op: "create" } }, async () => {
+  // inherits userId + merges metadata from outer context
   await db.insert(users).values({ name: "Alice" }).returning();
 });
+await db.$audit.newContext({ userId: null }, async () => {
+  /* clean scope */
+});
 const ctx = db.$audit.context(); // read current context
-db.$audit.addMetadata({ op: "create" }); // merge into current context
+db.$audit.addMetadata({ requestId: "req_1" }); // mutate current context
 
 // Batch flush
 await db.$audit.flush();
@@ -232,19 +236,48 @@ const db = withDrizzleAudit(rawDb, {
 
 Track who performed each action. Context is always optional — without it, `userId` is `null`.
 
-```ts
-// Via db.$audit
-await db.$audit.withContext({ userId: req.user.id, metadata: { ip: req.ip } }, async () => {
-  await db.update(users).set({ name: "Bob" }).where(eq(users.id, 1)).returning();
-});
-db.$audit.addMetadata({ operation: "update-profile" });
+### `withContext` — merges with existing context
 
-// Or via standalone imports
-import { withDrizzleAuditContext, addDrizzleAuditMetadata } from "drizzle-audit";
-await withDrizzleAuditContext({ userId: "u_1" }, async () => {
-  /* ... */
+`withContext` inherits the outer context and shallow-merges metadata. `userId` is only overridden if explicitly provided.
+
+```ts
+// Middleware sets: { userId: "admin", metadata: { ip: "1.2.3.4" } }
+
+await db.$audit.withContext({ metadata: { operation: "edit" } }, async () => {
+  // Context is: { userId: "admin", metadata: { ip: "1.2.3.4", operation: "edit" } }
+  // userId inherited, metadata merged
 });
-addDrizzleAuditMetadata({ requestId: "req_1" });
+
+// Override userId in nested scope
+await db.$audit.withContext({ userId: "system" }, async () => {
+  // Context is: { userId: "system", metadata: { ip: "1.2.3.4" } }
+});
+```
+
+### `newContext` — replaces entirely (clean scope)
+
+Use when you don't want to inherit the outer context (e.g. system actions inside a user request):
+
+```ts
+await db.$audit.newContext({ userId: null, metadata: { trigger: "cron" } }, async () => {
+  // Clean context — nothing from the outer request leaks in
+});
+```
+
+### `addMetadata` — mutate current context in-place
+
+```ts
+db.$audit.addMetadata({ requestId: "req_1", operation: "create-order" });
+```
+
+### Standalone imports
+
+```ts
+import {
+  withDrizzleAuditContext, // merges
+  newDrizzleAuditContext, // replaces
+  addDrizzleAuditMetadata,
+} from "drizzle-audit";
 ```
 
 ## Framework Middleware
@@ -598,7 +631,8 @@ Same functionality accessible from the wrapped db instance — convenient when d
 | -------------------------------- | ------------------------------------------ |
 | `db.$audit.action(options)`      | Log a custom audit entry                   |
 | `db.$audit.track(options)`       | Scoped tracking with `using`/`await using` |
-| `db.$audit.withContext(ctx, fn)` | Run function with audit context            |
+| `db.$audit.withContext(ctx, fn)` | Merge context and run function             |
+| `db.$audit.newContext(ctx, fn)`  | Replace context entirely and run function  |
 | `db.$audit.context()`            | Get current context (`null` if none)       |
 | `db.$audit.addMetadata(data)`    | Merge metadata into current context        |
 | `db.$audit.flush()`              | Flush buffered entries (batch mode)        |
@@ -606,12 +640,13 @@ Same functionality accessible from the wrapped db instance — convenient when d
 
 ### Context (standalone imports — useful when db is not in scope)
 
-| Export                             | Description                          |
-| ---------------------------------- | ------------------------------------ |
-| `withDrizzleAuditContext(ctx, fn)` | Run a function with audit context    |
-| `useDrizzleAuditContext()`         | Get current context (`null` if none) |
-| `getDrizzleAuditContext()`         | Get current context (throws if none) |
-| `addDrizzleAuditMetadata(data)`    | Merge metadata into current context  |
+| Export                             | Description                                  |
+| ---------------------------------- | -------------------------------------------- |
+| `withDrizzleAuditContext(ctx, fn)` | Merge with existing context and run function |
+| `newDrizzleAuditContext(ctx, fn)`  | Replace context entirely and run function    |
+| `useDrizzleAuditContext()`         | Get current context (`null` if none)         |
+| `getDrizzleAuditContext()`         | Get current context (throws if none)         |
+| `addDrizzleAuditMetadata(data)`    | Merge metadata into current context          |
 
 ### Schema
 

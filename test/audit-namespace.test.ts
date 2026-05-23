@@ -135,4 +135,124 @@ describe("db.$audit namespace", () => {
     expect(db.$pendingAuditEntries).toBe(0);
     expect(entries).toHaveLength(1);
   });
+
+  test("$audit.newContext replaces context entirely", async () => {
+    const db = withDrizzleAudit(await createTestDb(), { storage });
+
+    await db.$audit.withContext({ userId: "outer", metadata: { ip: "1.2.3.4" } }, async () => {
+      await db.$audit.newContext({ userId: null, metadata: { trigger: "system" } }, async () => {
+        await db.$audit.action({ action: "SYSTEM_OP" });
+      });
+    });
+
+    expect(entries[0]!.userId).toBeNull();
+    expect((entries[0]!.metadata as any).trigger).toBe("system");
+    expect((entries[0]!.metadata as any).ip).toBeUndefined(); // NOT inherited
+  });
+
+  test("$audit.withContext merges with existing context", async () => {
+    const db = withDrizzleAudit(await createTestDb(), { storage });
+
+    await db.$audit.withContext({ userId: "admin", metadata: { ip: "1.2.3.4" } }, async () => {
+      await db.$audit.withContext({ metadata: { operation: "edit" } }, async () => {
+        await db.$audit.action({ action: "NESTED_OP" });
+      });
+    });
+
+    expect(entries[0]!.userId).toBe("admin"); // inherited
+    expect((entries[0]!.metadata as any).ip).toBe("1.2.3.4"); // inherited
+    expect((entries[0]!.metadata as any).operation).toBe("edit"); // merged
+  });
+
+  test("complex nested context with track, action, withContext, newContext", async () => {
+    const db = withDrizzleAudit(await createTestDb(), { storage });
+
+    await db.$audit.withContext({ userId: "admin_1", metadata: { ip: "10.0.0.1" } }, async () => {
+      // Add metadata to the current context
+      db.$audit.addMetadata({ function: "something" });
+
+      // Track the outer operation
+      {
+        using _outerTrack = db.$audit.track({
+          action: "EDIT",
+          metadata: { s: 6 },
+        });
+
+        // Wait for the START entry to write
+        await new Promise((r) => setTimeout(r, 10));
+
+        // Nested withContext — merges userId + metadata
+        await db.$audit.withContext({ userId: null, metadata: { now: "2026-01-01" } }, async () => {
+          // userId is now null (overridden), metadata merged with outer
+          {
+            await using _innerTrack = db.$audit.track({
+              action: "OTHER",
+              metadata: { extra_data: { more: "data" } },
+            });
+
+            await new Promise((r) => setTimeout(r, 10));
+
+            await db.$audit.action({
+              action: "IN_PROGRESS_SOMETHING",
+              metadata: { r: 5 },
+            });
+          }
+          // Inner track END written here (await using)
+        });
+
+        // Back to outer context after withContext exits
+      }
+      // Outer track END written here (using — fire-and-forget)
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    // Should have 6 entries:
+    // 1. EDIT START
+    // 2. OTHER START
+    // 3. IN_PROGRESS_SOMETHING
+    // 4. OTHER END (completed)
+    // 5. EDIT END (completed)
+    expect(entries.length).toBeGreaterThanOrEqual(5);
+
+    // EDIT START should have admin_1 userId
+    const editStart = entries.find(
+      (e) => e.action === "EDIT" && (e.metadata as any)?.status === "started",
+    );
+    expect(editStart).toBeDefined();
+    expect(editStart!.userId).toBe("admin_1");
+    expect((editStart!.metadata as any).ip).toBe("10.0.0.1");
+    expect((editStart!.metadata as any).function).toBe("something");
+    expect((editStart!.metadata as any).s).toBe(6);
+
+    // OTHER START should have null userId (overridden by withContext)
+    const otherStart = entries.find(
+      (e) => e.action === "OTHER" && (e.metadata as any)?.status === "started",
+    );
+    expect(otherStart).toBeDefined();
+    expect(otherStart!.userId).toBeNull();
+    expect((otherStart!.metadata as any).now).toBe("2026-01-01"); // from withContext
+    expect((otherStart!.metadata as any).ip).toBe("10.0.0.1"); // inherited from outer
+    expect((otherStart!.metadata as any).function).toBe("something"); // inherited
+
+    // IN_PROGRESS_SOMETHING should have null userId
+    const inProgress = entries.find((e) => e.action === "IN_PROGRESS_SOMETHING");
+    expect(inProgress).toBeDefined();
+    expect(inProgress!.userId).toBeNull();
+    expect((inProgress!.metadata as any).r).toBe(5);
+
+    // OTHER END should be completed with duration
+    const otherEnd = entries.find(
+      (e) => e.action === "OTHER" && (e.metadata as any)?.status === "completed",
+    );
+    expect(otherEnd).toBeDefined();
+    expect((otherEnd!.metadata as any).duration).toBeTypeOf("number");
+
+    // EDIT END should be completed with admin_1 userId (back to outer context)
+    const editEnd = entries.find(
+      (e) => e.action === "EDIT" && (e.metadata as any)?.status === "completed",
+    );
+    expect(editEnd).toBeDefined();
+    expect(editEnd!.userId).toBe("admin_1");
+    expect((editEnd!.metadata as any).duration).toBeTypeOf("number");
+  });
 });

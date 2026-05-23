@@ -72,4 +72,18 @@ tmp/                    — gitignored scratch/reference (not committed)
 - No-op UPDATE detection (skips audit when nothing changed)
 - Automatic interception requires `.returning()` — MySQL needs manual `drizzleAuditAction()`
 - `drizzle-orm >= 0.33.0 < 2` as peer dependency
+- `withDrizzleAuditContext` MERGES with existing context, `newDrizzleAuditContext` REPLACES
+- `db.$audit` namespace exposes all audit functionality from the db instance
 - All examples use `get-port-please` for automatic port selection
+
+## IMPORTANT: Before Every Commit / Release
+
+**ALWAYS update these when making changes:**
+
+1. **README.md** — update relevant sections, API reference tables, and code examples
+2. **TSDoc** — update JSDoc on any modified public exports
+3. **CLAUDE.md** — update if patterns, structure, or key decisions change
+4. **Tests** — add/update tests for any new or changed behavior
+5. **CHANGELOG** — handled automatically by `changelogen` via conventional commits
+
+**Never commit code changes without updating the corresponding docs.**
