@@ -1,6 +1,7 @@
 import { test, expect, describe } from "vitest";
 import {
   withDrizzleAuditContext,
+  newDrizzleAuditContext,
   useDrizzleAuditContext,
   getDrizzleAuditContext,
   addDrizzleAuditMetadata,
@@ -40,15 +41,32 @@ describe("getDrizzleAuditContext", () => {
 });
 
 describe("withDrizzleAuditContext", () => {
-  test("nesting works — inner shadows outer", async () => {
-    await withDrizzleAuditContext({ userId: "outer" }, async () => {
-      expect(useDrizzleAuditContext()!.userId).toBe("outer");
+  test("nesting merges — inner inherits outer metadata", async () => {
+    await withDrizzleAuditContext({ userId: "outer", metadata: { ip: "1.2.3.4" } }, async () => {
+      await withDrizzleAuditContext({ metadata: { operation: "edit" } }, async () => {
+        const ctx = useDrizzleAuditContext()!;
+        expect(ctx.userId).toBe("outer"); // inherited
+        expect(ctx.metadata).toEqual({ ip: "1.2.3.4", operation: "edit" }); // merged
+      });
 
+      // Outer restored
+      expect(useDrizzleAuditContext()!.userId).toBe("outer");
+      expect(useDrizzleAuditContext()!.metadata).toEqual({ ip: "1.2.3.4" });
+    });
+  });
+
+  test("inner userId overrides outer when provided", async () => {
+    await withDrizzleAuditContext({ userId: "outer" }, async () => {
       await withDrizzleAuditContext({ userId: "inner" }, async () => {
         expect(useDrizzleAuditContext()!.userId).toBe("inner");
       });
-
       expect(useDrizzleAuditContext()!.userId).toBe("outer");
+    });
+  });
+
+  test("works without existing context (no merge needed)", async () => {
+    await withDrizzleAuditContext({ userId: "fresh" }, async () => {
+      expect(useDrizzleAuditContext()!.userId).toBe("fresh");
     });
   });
 
@@ -75,6 +93,28 @@ describe("withDrizzleAuditContext", () => {
 
     expect(results).toContain("a");
     expect(results).toContain("b");
+  });
+});
+
+describe("newDrizzleAuditContext", () => {
+  test("replaces existing context entirely", async () => {
+    await withDrizzleAuditContext({ userId: "outer", metadata: { ip: "1.2.3.4" } }, async () => {
+      await newDrizzleAuditContext({ userId: null, metadata: { trigger: "system" } }, async () => {
+        const ctx = useDrizzleAuditContext()!;
+        expect(ctx.userId).toBeNull(); // NOT inherited
+        expect(ctx.metadata).toEqual({ trigger: "system" }); // NOT merged
+        expect((ctx.metadata as any).ip).toBeUndefined(); // outer metadata gone
+      });
+
+      // Outer restored
+      expect(useDrizzleAuditContext()!.userId).toBe("outer");
+    });
+  });
+
+  test("works without existing context", async () => {
+    await newDrizzleAuditContext({ userId: "fresh" }, async () => {
+      expect(useDrizzleAuditContext()!.userId).toBe("fresh");
+    });
   });
 });
 

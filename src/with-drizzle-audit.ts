@@ -3,6 +3,7 @@ import {
   resolveContext,
   useDrizzleAuditContext,
   withDrizzleAuditContext,
+  newDrizzleAuditContext,
   addDrizzleAuditMetadata,
 } from "./context.ts";
 import { buildChanges } from "./diff.ts";
@@ -243,16 +244,30 @@ export interface AuditNamespace {
     options: import("./track-action.ts").TrackActionOptions,
   ): import("./track-action.ts").ActionTracker;
   /**
-   * Run a function with audit context. Context is cleaned up when fn completes.
+   * Run a function with audit context, **merging** with any existing context.
+   * userId is overridden if provided, metadata is shallow-merged.
    *
    * @example
    * ```ts
-   * await db.$audit.withContext({ userId: "u_1", metadata: { ip } }, async () => {
-   *   await db.insert(users).values({ name: "Alice" }).returning();
+   * // Outer: { userId: "admin", metadata: { ip: "1.2.3.4" } }
+   * await db.$audit.withContext({ metadata: { operation: "edit" } }, async () => {
+   *   // Inner: { userId: "admin", metadata: { ip: "1.2.3.4", operation: "edit" } }
    * });
    * ```
    */
-  withContext<T>(context: DrizzleAuditContext, fn: () => Promise<T>): Promise<T>;
+  withContext<T>(context: Partial<DrizzleAuditContext>, fn: () => Promise<T>): Promise<T>;
+  /**
+   * Run a function with a **fresh** audit context, ignoring any existing context.
+   * Use when you don't want to inherit the current context (e.g. system actions).
+   *
+   * @example
+   * ```ts
+   * await db.$audit.newContext({ userId: null, metadata: { trigger: "system" } }, async () => {
+   *   // Clean context — nothing from the outer scope leaks in
+   * });
+   * ```
+   */
+  newContext<T>(context: DrizzleAuditContext, fn: () => Promise<T>): Promise<T>;
   /** Get the current audit context, or `null` if none is active. */
   context(): DrizzleAuditContext | null;
   /** Merge metadata into the current audit context. */
@@ -367,6 +382,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
     action: (opts) => drizzleAuditAction(opts, storage),
     track: (opts) => trackAction(opts, storage),
     withContext: withDrizzleAuditContext,
+    newContext: newDrizzleAuditContext,
     context: useDrizzleAuditContext,
     addMetadata: addDrizzleAuditMetadata,
   };

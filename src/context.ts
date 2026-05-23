@@ -63,25 +63,52 @@ export function getDrizzleAuditContext(): DrizzleAuditContext {
  *
  * @example
  * ```ts
- * // Web request handler
+ * // Merges with existing context
  * await withDrizzleAuditContext(
  *   { userId: req.user.id, metadata: { ip: req.ip } },
  *   async () => {
- *     await db.insert(users).values({ name: 'Alice' }).returning()
- *     // audit entry will include userId and metadata
- *   },
- * )
- *
- * // Background job
- * await withDrizzleAuditContext(
- *   { userId: 'system', metadata: { job: 'cleanup' } },
- *   async () => {
- *     await db.delete(sessions).where(expired)
+ *     // If outer context had { metadata: { requestId: 'r_1' } },
+ *     // inner context is { userId: req.user.id, metadata: { requestId: 'r_1', ip: req.ip } }
  *   },
  * )
  * ```
  */
 export async function withDrizzleAuditContext<T>(
+  context: Partial<DrizzleAuditContext> & Pick<DrizzleAuditContext, never>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const existing = auditStorage.getStore();
+  const merged: DrizzleAuditContext = {
+    userId: context.userId !== undefined ? context.userId : (existing?.userId ?? null),
+    metadata: { ...existing?.metadata, ...context.metadata },
+  };
+  return auditStorage.run(merged, fn);
+}
+
+/**
+ * Run a function within a **fresh** audit context scope, ignoring any existing context.
+ * Use this when you want to start clean (e.g. a system action that should not
+ * inherit the current user's context).
+ *
+ * For merging with existing context, use {@link withDrizzleAuditContext} instead.
+ *
+ * @param context - The audit context to set (replaces any existing context)
+ * @param fn - The async function to run within the context
+ * @returns The return value of `fn`
+ *
+ * @example
+ * ```ts
+ * // Inside a user request, run a system action with clean context
+ * await newDrizzleAuditContext(
+ *   { userId: null, metadata: { trigger: 'system' } },
+ *   async () => {
+ *     // No userId from the outer request leaks in
+ *     await db.delete(expiredTokens).where(...)
+ *   },
+ * )
+ * ```
+ */
+export async function newDrizzleAuditContext<T>(
   context: DrizzleAuditContext,
   fn: () => Promise<T>,
 ): Promise<T> {

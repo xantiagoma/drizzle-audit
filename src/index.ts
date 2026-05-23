@@ -6,6 +6,7 @@ export { trackAction } from "./track-action.ts";
 export type { TrackActionOptions, ActionTracker } from "./track-action.ts";
 export {
   withDrizzleAuditContext,
+  newDrizzleAuditContext,
   useDrizzleAuditContext,
   getDrizzleAuditContext,
   addDrizzleAuditMetadata,
