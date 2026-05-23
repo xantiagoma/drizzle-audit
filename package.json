@@ -232,7 +232,7 @@
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "check": "vp lint && vp fmt --check && tsc --noEmit",
-    "release": "changelogen --release --push",
+    "release": "changelogen --release --push --no-open",
     "changelog": "changelogen",
     "prepare": "husky",
     "example:basic": "bun examples/basic/server.ts",
