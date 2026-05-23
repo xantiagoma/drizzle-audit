@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.4
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.3...v0.1.4)
+
+### 🚀 Enhancements
+
+- Deep merge metadata with pluggable strategy ([be2ef1f](https://github.com/xantiagoma/drizzle-audit/commit/be2ef1f))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.3
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.2...v0.1.3)
