@@ -1,5 +1,5 @@
 export { withDrizzleAudit } from "./with-drizzle-audit.ts";
-export type { AuditedDb } from "./with-drizzle-audit.ts";
+export type { AuditedDb, AuditNamespace } from "./with-drizzle-audit.ts";
 export { drizzleAuditAction } from "./audit-action.ts";
 export type { DrizzleAuditActionOptions } from "./audit-action.ts";
 export { trackAction } from "./track-action.ts";

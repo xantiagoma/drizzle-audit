@@ -1,10 +1,18 @@
 import { getTableName, getTableColumns, type Table } from "drizzle-orm";
-import { resolveContext } from "./context.ts";
+import {
+  resolveContext,
+  useDrizzleAuditContext,
+  withDrizzleAuditContext,
+  addDrizzleAuditMetadata,
+} from "./context.ts";
 import { buildChanges } from "./diff.ts";
 import { _setGlobalStorage } from "./audit-action-internal.ts";
+import { drizzleAuditAction } from "./audit-action.ts";
+import { trackAction } from "./track-action.ts";
 import { _withTxDb } from "./storage/drizzle.ts";
 import type {
   DrizzleAuditOptions,
+  DrizzleAuditContext,
   AuditEntry,
   AuditStorage,
   AuditErrorHandler,
@@ -184,53 +192,97 @@ async function writeAuditEntries(
 }
 
 /**
- * Additional properties mixed into the Drizzle database instance returned by
- * {@link withDrizzleAudit}. These members are only meaningful when
- * `flushMode: "batch"` is configured; in `"immediate"` mode they are no-ops /
- * always zero.
+ * The `$audit` namespace available on a Drizzle db instance wrapped by
+ * {@link withDrizzleAudit}. Provides access to all audit functionality
+ * directly from the db object — no extra imports needed.
  *
  * @example
  * ```ts
- * const db = withDrizzleAudit(rawDb, { storage, flushMode: "batch" });
+ * const db = withDrizzleAudit(rawDb, { storage });
  *
- * await db.insert(users).values({ name: "Alice" }).returning();
- * console.log(db.$pendingAuditEntries); // 1
+ * // Custom action
+ * await db.$audit.action({ action: "VIEW_PII", tableName: "users", rowId: "42" });
  *
- * await db.$flushAudit();
- * console.log(db.$pendingAuditEntries); // 0
+ * // Scoped tracking
+ * { using t = db.$audit.track({ action: "PROCESS_ORDER" }); }
+ *
+ * // Context
+ * await db.$audit.withContext({ userId: "u_1" }, async () => { ... });
+ * const ctx = db.$audit.context();
+ *
+ * // Batch flush
+ * await db.$audit.flush();
+ * console.log(db.$audit.pending); // 0
  * ```
  */
-export interface AuditedDb {
+export interface AuditNamespace {
+  /** Flush all buffered audit entries to storage. No-op in `"immediate"` mode. */
+  flush(): Promise<void>;
+  /** Number of buffered entries not yet written. Always `0` in `"immediate"` mode. */
+  readonly pending: number;
   /**
-   * Flushes all buffered audit entries to storage immediately.
-   *
-   * Call this at the end of a request or job when using `flushMode: "batch"`.
-   * In `"immediate"` mode this is a no-op.
-   *
-   * @returns A promise that resolves once all buffered entries have been written.
+   * Log a custom (non-DB) audit entry. Can be awaited or fire-and-forget.
    *
    * @example
    * ```ts
-   * // Hono middleware — flush after every request
-   * app.use(async (c, next) => {
-   *   await next();
-   *   await db.$flushAudit();
+   * await db.$audit.action({ action: "LOGIN_FAILED", userId: email, metadata: { ip } });
+   * db.$audit.action({ action: "VIEW_PII", tableName: "users", rowId: "42" }); // fire-and-forget
+   * ```
+   */
+  action(options: import("./audit-action.ts").DrizzleAuditActionOptions): Promise<void>;
+  /**
+   * Start a scoped action tracker. Use with `using` or `await using`.
+   *
+   * @example
+   * ```ts
+   * { using t = db.$audit.track({ action: "PROCESS" }); t.addMetadata({ step: 1 }); }
+   * { await using t = db.$audit.track({ action: "BULK_OP" }); }
+   * ```
+   */
+  track(
+    options: import("./track-action.ts").TrackActionOptions,
+  ): import("./track-action.ts").ActionTracker;
+  /**
+   * Run a function with audit context. Context is cleaned up when fn completes.
+   *
+   * @example
+   * ```ts
+   * await db.$audit.withContext({ userId: "u_1", metadata: { ip } }, async () => {
+   *   await db.insert(users).values({ name: "Alice" }).returning();
    * });
    * ```
    */
+  withContext<T>(context: DrizzleAuditContext, fn: () => Promise<T>): Promise<T>;
+  /** Get the current audit context, or `null` if none is active. */
+  context(): DrizzleAuditContext | null;
+  /** Merge metadata into the current audit context. */
+  addMetadata(metadata: Record<string, unknown>): void;
+}
+
+/**
+ * Properties added to the Drizzle db instance by {@link withDrizzleAudit}.
+ *
+ * @example
+ * ```ts
+ * const db = withDrizzleAudit(rawDb, { storage });
+ *
+ * // All audit features via db.$audit
+ * // Via namespace
+ * await db.$audit.action({ action: "VIEW_PII" });
+ * await db.$audit.flush();
+ *
+ * // Via shortcuts
+ * await db.$flushAudit();
+ * console.log(db.$pendingAuditEntries);
+ * ```
+ */
+export interface AuditedDb {
+  /** All audit functionality in one namespace */
+  readonly $audit: AuditNamespace;
+  /** Shortcut for `db.$audit.flush()` */
   $flushAudit(): Promise<void>;
-  /**
-   * The number of audit entries currently buffered and not yet written to
-   * storage. Always `0` when `flushMode` is `"immediate"`.
-   *
-   * @example
-   * ```ts
-   * if (db.$pendingAuditEntries > 0) {
-   *   await db.$flushAudit();
-   * }
-   * ```
-   */
-  $pendingAuditEntries: number;
+  /** Shortcut for `db.$audit.pending` */
+  readonly $pendingAuditEntries: number;
 }
 
 /**
@@ -304,15 +356,32 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
 
   const typedDb = db as any;
 
+  // Build the $audit namespace object (created once, reused)
+  const auditNamespace: AuditNamespace = {
+    flush: async () => {
+      if (batch) await batch.flush();
+    },
+    get pending() {
+      return batch?.pending ?? 0;
+    },
+    action: (opts) => drizzleAuditAction(opts, storage),
+    track: (opts) => trackAction(opts, storage),
+    withContext: withDrizzleAuditContext,
+    context: useDrizzleAuditContext,
+    addMetadata: addDrizzleAuditMetadata,
+  };
+
   return new Proxy(typedDb, {
     get(target, prop, receiver) {
+      if (prop === "$audit") {
+        return auditNamespace;
+      }
+      // Legacy shortcuts
       if (prop === "$flushAudit") {
-        return async () => {
-          if (batch) await batch.flush();
-        };
+        return auditNamespace.flush;
       }
       if (prop === "$pendingAuditEntries") {
-        return batch?.pending ?? 0;
+        return auditNamespace.pending;
       }
 
       if (prop === "insert") {

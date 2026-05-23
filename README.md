@@ -75,7 +75,46 @@ await db.delete(users).where(eq(users.id, 1)).returning();
 
 No context needed — `userId` will be `null` but all data changes are captured. No-op updates (where nothing actually changed) are automatically skipped.
 
-> **Note:** Automatic interception requires `.returning()`. PostgreSQL and SQLite support this natively. For MySQL (which lacks `RETURNING`), use `drizzleAuditAction()` for manual audit entries — see the [Express+MySQL example](./examples/express-mysql-sqlite/).
+> **Note:** Automatic interception requires `.returning()`. PostgreSQL and SQLite support this natively. For MySQL (which lacks `RETURNING`), use `db.$audit.action()` for manual audit entries — see the [Express+MySQL example](./examples/express-mysql-sqlite/).
+
+## `db.$audit` Namespace
+
+Everything is accessible directly from the wrapped db — no extra imports needed:
+
+```ts
+const db = withDrizzleAudit(rawDb, { storage, auditTable: auditLog });
+
+// Custom actions
+await db.$audit.action({ action: "VIEW_PII", tableName: "users", rowId: "42" });
+db.$audit.action({ action: "LOGIN", userId: email }); // fire-and-forget
+
+// Scoped tracking (using / await using)
+{
+  using t = db.$audit.track({ action: "PROCESS_ORDER" }); /* ... */
+}
+
+// Context
+await db.$audit.withContext({ userId: "u_1", metadata: { ip } }, async () => {
+  await db.insert(users).values({ name: "Alice" }).returning();
+});
+const ctx = db.$audit.context(); // read current context
+db.$audit.addMetadata({ op: "create" }); // merge into current context
+
+// Batch flush
+await db.$audit.flush();
+console.log(db.$audit.pending); // 0
+```
+
+Both approaches are equally valid — use whichever fits your code:
+
+```ts
+// Standalone imports — useful when you don't have the db reference
+// (e.g. a utility function, a middleware, a background job handler)
+import { drizzleAuditAction, withDrizzleAuditContext, trackAction } from "drizzle-audit";
+
+// db.$audit — convenient when you already have db in scope
+db.$audit.action({ action: "VIEW_PII" });
+```
 
 ## Examples
 
@@ -194,16 +233,18 @@ const db = withDrizzleAudit(rawDb, {
 Track who performed each action. Context is always optional — without it, `userId` is `null`.
 
 ```ts
-import { withDrizzleAuditContext, addDrizzleAuditMetadata } from "drizzle-audit";
-
-// Wrap any scope with context
-await withDrizzleAuditContext({ userId: req.user.id, metadata: { ip: req.ip } }, async () => {
+// Via db.$audit
+await db.$audit.withContext({ userId: req.user.id, metadata: { ip: req.ip } }, async () => {
   await db.update(users).set({ name: "Bob" }).where(eq(users.id, 1)).returning();
-  // → audit entry includes userId and metadata automatically
 });
+db.$audit.addMetadata({ operation: "update-profile" });
 
-// Add metadata mid-request
-addDrizzleAuditMetadata({ operation: "update-profile" });
+// Or via standalone imports
+import { withDrizzleAuditContext, addDrizzleAuditMetadata } from "drizzle-audit";
+await withDrizzleAuditContext({ userId: "u_1" }, async () => {
+  /* ... */
+});
+addDrizzleAuditMetadata({ requestId: "req_1" });
 ```
 
 ## Framework Middleware
@@ -352,12 +393,11 @@ const cleanup = drizzleAuditWrap({ userId: null, metadata: { trigger: "cron" } }
 await cleanup();
 ```
 
-### Using withDrizzleAuditContext directly
+### Using db.$audit.withContext directly
 
 ```ts
-import { withDrizzleAuditContext } from "drizzle-audit";
-
-await withDrizzleAuditContext({ userId: "system", metadata: { script: "migrate" } }, async () => {
+// No imports needed
+await db.$audit.withContext({ userId: "system", metadata: { script: "migrate" } }, async () => {
   await db.update(users).set({ role: "admin" }).where(eq(users.id, 1)).returning();
 });
 ```
@@ -367,22 +407,13 @@ await withDrizzleAuditContext({ userId: "system", metadata: { script: "migrate" 
 Audit events that aren't database operations:
 
 ```ts
+// Via db.$audit
+db.$audit.action({ action: "VIEW_PII", tableName: "users", rowId: "42" }); // fire-and-forget
+await db.$audit.action({ action: "LOGIN_FAILED", userId: email }); // awaited (compliance)
+
+// Or via standalone import
 import { drizzleAuditAction } from "drizzle-audit";
-
-// Fire-and-forget (don't await)
-drizzleAuditAction({
-  action: "VIEW_PII",
-  tableName: "users",
-  rowId: "42",
-  metadata: { fields: ["email", "ssn"] },
-});
-
-// Awaited (compliance — must confirm it was logged)
-await drizzleAuditAction({
-  action: "LOGIN_FAILED",
-  userId: email,
-  metadata: { ip: req.ip, reason: "invalid_password" },
-});
+drizzleAuditAction({ action: "VIEW_PII", tableName: "users", rowId: "42" });
 ```
 
 ## Scoped Tracking (`using` / `await using`)
@@ -390,11 +421,9 @@ await drizzleAuditAction({
 Track start/end of long operations with automatic duration and status:
 
 ```ts
-import { trackAction } from "drizzle-audit";
-
-// Fire-and-forget end
+// Via db.$audit
 {
-  using tracker = trackAction({ action: "PROCESS_ORDER", metadata: { orderId } });
+  using tracker = db.$audit.track({ action: "PROCESS_ORDER", metadata: { orderId } });
   await validateInventory(orderId);
   tracker.addMetadata({ paymentId: "pay_123" });
   await chargePayment(orderId);
@@ -403,8 +432,14 @@ import { trackAction } from "drizzle-audit";
 
 // Awaited end (compliance)
 {
-  await using tracker = trackAction({ action: "BULK_DELETE" });
+  await using tracker = db.$audit.track({ action: "BULK_DELETE" });
   // ...
+}
+
+// Or via standalone import
+import { trackAction } from "drizzle-audit";
+{
+  using t = trackAction({ action: "PROCESS" });
 }
 ```
 
@@ -463,11 +498,14 @@ const db = withDrizzleAudit(rawDb, { storage, flushMode: "batch" });
 // Flush at end of request (Hono example)
 app.use("*", async (c, next) => {
   await next();
-  await db.$flushAudit();
+  await db.$audit.flush();
 });
 
 // Flush on interval (long-running workers)
-setInterval(() => db.$flushAudit(), 5000);
+setInterval(() => db.$audit.flush(), 5000);
+
+// Check pending count
+console.log(db.$audit.pending);
 ```
 
 ## Storage Adapters
@@ -546,13 +584,27 @@ const db = withDrizzleAudit(rawDb, {
 
 ### Core
 
-| Export                          | Description                                                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `withDrizzleAudit(db, options)` | Wrap a Drizzle db for automatic audit logging. Returns `db` with `$flushAudit()` and `$pendingAuditEntries` |
-| `drizzleAuditAction(options)`   | Log a custom (non-DB) audit entry                                                                           |
-| `trackAction(options)`          | Scoped tracking with `using`/`await using`                                                                  |
+| Export                          | Description                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `withDrizzleAudit(db, options)` | Wrap a Drizzle db for automatic audit logging. Returns `db` with `$audit` namespace |
+| `drizzleAuditAction(options)`   | Log a custom audit entry (works without db reference)                               |
+| `trackAction(options)`          | Scoped tracking with `using`/`await using` (works without db reference)             |
 
-### Context
+### `db.$audit` Namespace
+
+Same functionality accessible from the wrapped db instance — convenient when db is in scope:
+
+| Method                           | Description                                |
+| -------------------------------- | ------------------------------------------ |
+| `db.$audit.action(options)`      | Log a custom audit entry                   |
+| `db.$audit.track(options)`       | Scoped tracking with `using`/`await using` |
+| `db.$audit.withContext(ctx, fn)` | Run function with audit context            |
+| `db.$audit.context()`            | Get current context (`null` if none)       |
+| `db.$audit.addMetadata(data)`    | Merge metadata into current context        |
+| `db.$audit.flush()`              | Flush buffered entries (batch mode)        |
+| `db.$audit.pending`              | Number of buffered entries                 |
+
+### Context (standalone imports — useful when db is not in scope)
 
 | Export                             | Description                          |
 | ---------------------------------- | ------------------------------------ |
