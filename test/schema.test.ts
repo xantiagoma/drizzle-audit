@@ -109,7 +109,7 @@ describe("sqliteAuditTable", () => {
     const columns = getTableColumns(table);
     // changes, oldData, newData, metadata should be text with json mode
     for (const col of ["changes", "oldData", "newData", "metadata"]) {
-      expect(((columns as any)[col]).columnType).toBe("SQLiteTextJson");
+      expect((columns as any)[col].columnType).toBe("SQLiteTextJson");
     }
   });
 
@@ -166,7 +166,7 @@ describe("mysqlAuditTable", () => {
     const table = mysqlAuditTable();
     const columns = getTableColumns(table);
     for (const col of ["changes", "oldData", "newData", "metadata"]) {
-      expect(((columns as any)[col]).columnType).toBe("MySqlJson");
+      expect((columns as any)[col].columnType).toBe("MySqlJson");
     }
   });
 
