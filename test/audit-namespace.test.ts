@@ -150,6 +150,32 @@ describe("db.$audit namespace", () => {
     expect((entries[0]!.metadata as any).ip).toBeUndefined(); // NOT inherited
   });
 
+  test("custom computeChanges function is used for UPDATE", async () => {
+    const db = withDrizzleAudit(await createTestDb(), {
+      storage,
+      computeChanges: (oldData, newData) => {
+        // Custom format: just list changed field names
+        const changed: string[] = [];
+        for (const key of Object.keys(newData)) {
+          if (oldData[key] !== newData[key]) changed.push(key);
+        }
+        return changed.length ? { _changed: changed } : null;
+      },
+    });
+
+    await db.insert(users).values({ name: "Alice", email: "a@x.com" }).returning();
+    await db
+      .update(users)
+      .set({ name: "Bob" })
+      .where(sql`id = 1`)
+      .returning();
+
+    const updateEntry = entries.find((e) => e.action === "UPDATE");
+    expect(updateEntry).toBeDefined();
+    // Custom format instead of default { field: { from, to } }
+    expect((updateEntry!.changes as any)._changed).toContain("name");
+  });
+
   test("custom metadataMerge function is used", async () => {
     // Custom shallow merge (no deep merge)
     const db = withDrizzleAudit(await createTestDb(), {

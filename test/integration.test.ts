@@ -134,6 +134,54 @@ describe("withDrizzleAudit - INSERT", () => {
   });
 });
 
+describe("withDrizzleAudit - INSERT without returning", () => {
+  test("audits insert without .returning()", async () => {
+    const { auditedDb } = await createTestDb();
+
+    await auditedDb.insert(users).values({ name: "Alice", email: "alice@test.com" });
+
+    const entries = await getAuditEntries(auditedDb);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].action).toBe("INSERT");
+    expect(entries[0].tableName).toBe("users");
+    // Without returning, we audit from the values data
+    expect((entries[0].changes as any).name).toBe("Alice");
+  });
+});
+
+describe("withDrizzleAudit - UPDATE without returning", () => {
+  test("audits update without .returning()", async () => {
+    const { auditedDb } = await createTestDb();
+
+    await auditedDb.insert(users).values({ name: "Alice", email: "a@x.com" }).returning();
+    await auditedDb
+      .update(users)
+      .set({ name: "Bob" })
+      .where(sql`id = 1`);
+
+    const entries = await getAuditEntries(auditedDb);
+    const updateEntry = entries.find((e: any) => e.action === "UPDATE");
+    expect(updateEntry).toBeDefined();
+    expect(updateEntry!.tableName).toBe("users");
+  });
+});
+
+describe("withDrizzleAudit - DELETE without returning", () => {
+  test("audits delete without .returning()", async () => {
+    const { auditedDb } = await createTestDb();
+
+    await auditedDb.insert(users).values({ name: "Alice", email: "a@x.com" }).returning();
+    await auditedDb.delete(users).where(sql`id = 1`);
+
+    const entries = await getAuditEntries(auditedDb);
+    const deleteEntry = entries.find((e: any) => e.action === "DELETE");
+    expect(deleteEntry).toBeDefined();
+    expect(deleteEntry!.tableName).toBe("users");
+    // Old data should be captured via SELECT before
+    expect((deleteEntry!.changes as any).name).toBe("Alice");
+  });
+});
+
 describe("withDrizzleAudit - table scoping", () => {
   test("tables: array — only audits listed tables", async () => {
     const { db } = await createTestDb();

@@ -244,6 +244,50 @@ export type MetadataMergeFn = (
   base: Record<string, unknown>,
 ) => Record<string, unknown>;
 
+// --- Diff / Changes ---
+
+/**
+ * Function that computes the changes between old and new data for an UPDATE.
+ * Return `null` if nothing changed (no-op). The result is stored in the `changes` column.
+ *
+ * Default: shallow field-level diff as `{ field: { from, to } }`.
+ *
+ * @param oldData - State before the update
+ * @param newData - State after the update
+ * @returns The changes object to store, or `null` if no changes
+ *
+ * @example
+ * ```ts
+ * // Use microdiff for path-based nested diffs
+ * import diff from "microdiff";
+ *
+ * const db = withDrizzleAudit(rawDb, {
+ *   storage,
+ *   computeChanges: (oldData, newData) => {
+ *     const diffs = diff(oldData, newData);
+ *     if (diffs.length === 0) return null;
+ *     return { _diffs: diffs };
+ *   },
+ * })
+ *
+ * // Use JSON Patch format
+ * import { compare } from "fast-json-patch";
+ *
+ * const db = withDrizzleAudit(rawDb, {
+ *   storage,
+ *   computeChanges: (oldData, newData) => {
+ *     const patches = compare(oldData, newData);
+ *     if (patches.length === 0) return null;
+ *     return { _patches: patches };
+ *   },
+ * })
+ * ```
+ */
+export type ComputeChangesFn = (
+  oldData: Record<string, unknown>,
+  newData: Record<string, unknown>,
+) => Record<string, unknown> | null;
+
 // --- Flush Mode ---
 
 /**
@@ -311,14 +355,26 @@ export interface DrizzleAuditOptions {
   flushMode?: FlushMode;
   /**
    * Custom metadata merge function. Default uses `defu` (deep merge, arrays replaced).
-   * Override to use a different merge strategy.
    *
    * @example
    * ```ts
-   * // Use deepmerge-ts
-   * import { deepmerge } from "deepmerge-ts";
    * metadataMerge: (override, base) => deepmerge(base, override)
    * ```
    */
   metadataMerge?: MetadataMergeFn;
+  /**
+   * Custom function to compute changes for UPDATE operations.
+   * Default: shallow field-level diff as `{ field: { from, to } }`.
+   *
+   * @example
+   * ```ts
+   * // Use microdiff for deep nested diffs
+   * import diff from "microdiff";
+   * computeChanges: (oldData, newData) => {
+   *   const diffs = diff(oldData, newData);
+   *   return diffs.length === 0 ? null : { _diffs: diffs };
+   * }
+   * ```
+   */
+  computeChanges?: ComputeChangesFn;
 }

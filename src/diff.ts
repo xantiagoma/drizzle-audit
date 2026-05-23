@@ -136,11 +136,63 @@ function deepEqual(a: unknown, b: unknown): boolean {
  * // → { id: 1, name: 'Alice' }
  * ```
  */
+// --- Custom diff function support ---
+
+import type { ComputeChangesFn } from "./types.ts";
+
+let _customComputeChanges: ComputeChangesFn | undefined;
+
+/**
+ * Set a custom compute changes function. Called by `withDrizzleAudit`.
+ * @internal
+ */
+export function _setComputeChanges(fn: ComputeChangesFn | undefined): void {
+  _customComputeChanges = fn;
+}
+
+/** Default UPDATE diff: shallow field comparison with `{ from, to }` format */
+function defaultComputeChanges(
+  oldData: Record<string, unknown>,
+  newData: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const diffs = computeDiff(oldData, newData);
+  if (diffs.length === 0) return null;
+
+  const changes: Record<string, unknown> = {};
+  for (const diff of diffs) {
+    changes[diff.field] = { from: diff.from, to: diff.to };
+  }
+  return changes;
+}
+
+/**
+ * Build a changes object for an audit entry based on the action type.
+ *
+ * - **INSERT**: Returns all new fields as values
+ * - **UPDATE**: Uses the configured `computeChanges` function (default: `{ field: { from, to } }`)
+ * - **DELETE**: Returns all old fields as values
+ *
+ * @param action - The audit action (`'INSERT'`, `'UPDATE'`, `'DELETE'`, or custom)
+ * @param oldData - Previous state
+ * @param newData - New state
+ * @returns The changes object, or `null` if no changes
+ *
+ * @example
+ * ```ts
+ * buildChanges('INSERT', null, { id: 1, name: 'Alice' })
+ * // → { id: 1, name: 'Alice' }
+ *
+ * buildChanges('UPDATE', { name: 'Alice' }, { name: 'Bob' })
+ * // → { name: { from: 'Alice', to: 'Bob' } }
+ *
+ * buildChanges('DELETE', { id: 1, name: 'Alice' }, null)
+ * // → { id: 1, name: 'Alice' }
+ * ```
+ */
 export function buildChanges(
   action: string,
   oldData: Record<string, unknown> | null,
   newData: Record<string, unknown> | null,
-  options?: ComputeDiffOptions,
 ): Record<string, unknown> | null {
   if (action === "INSERT" && newData) {
     return { ...newData };
@@ -151,14 +203,8 @@ export function buildChanges(
   }
 
   if ((action === "UPDATE" || (action !== "INSERT" && action !== "DELETE")) && oldData && newData) {
-    const diffs = computeDiff(oldData, newData, options);
-    if (diffs.length === 0) return null;
-
-    const changes: Record<string, unknown> = {};
-    for (const diff of diffs) {
-      changes[diff.field] = { from: diff.from, to: diff.to };
-    }
-    return changes;
+    const fn = _customComputeChanges ?? defaultComputeChanges;
+    return fn(oldData, newData);
   }
 
   return null;

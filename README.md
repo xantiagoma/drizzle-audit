@@ -537,6 +537,40 @@ const db = withDrizzleAudit(rawDb, {
 });
 ```
 
+## Customization
+
+### Custom diff / changes format
+
+By default, UPDATE changes are stored as `{ field: { from, to } }`. You can swap the diff algorithm:
+
+```ts
+// Use microdiff for deep nested diffs
+import diff from "microdiff";
+
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  computeChanges: (oldData, newData) => {
+    const diffs = diff(oldData, newData);
+    return diffs.length === 0 ? null : { _diffs: diffs };
+  },
+});
+
+// Use JSON Patch format
+import { compare } from "fast-json-patch";
+
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  computeChanges: (oldData, newData) => {
+    const patches = compare(oldData, newData);
+    return patches.length === 0 ? null : { _patches: patches };
+  },
+});
+```
+
+### Custom metadata merge
+
+See [Deep merge behavior](#deep-merge-behavior) above — configurable via `metadataMerge`.
+
 ## Transactions
 
 Audit writes inside transactions use the same connection — no deadlocks:
