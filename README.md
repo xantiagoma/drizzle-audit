@@ -537,6 +537,45 @@ const db = withDrizzleAudit(rawDb, {
 });
 ```
 
+## Sampling
+
+Control which operations get audited — useful for high-traffic tables:
+
+```ts
+import { sampleRate, sampleWithOverride, alwaysAudit, neverAudit } from "drizzle-audit";
+
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  tables: {
+    // 10% of page views
+    pageViews: { sample: 0.1 },
+
+    // Custom logic: always audit deletes, sample 5% of inserts
+    requestLogs: {
+      shouldAudit: (ctx) => {
+        if (ctx.action === "DELETE") return true;
+        return Math.random() < 0.05;
+      },
+    },
+
+    // Using helpers
+    events: { shouldAudit: sampleWithOverride(0.1, (ctx) => ctx.userId === "admin") },
+    drafts: { shouldAudit: neverAudit() },
+    payments: { shouldAudit: alwaysAudit() },
+  },
+
+  // Global: always audit admins, 50% for everyone else
+  shouldAudit: (ctx) => {
+    if (ctx.userId === "admin") return true;
+    return Math.random() < 0.5;
+  },
+});
+```
+
+**Resolution order:** per-table `shouldAudit` → per-table `sample` → global `shouldAudit` → always audit.
+
+The `shouldAudit` function is called **before** diff/transforms — skipping avoids all overhead.
+
 ## Customization
 
 ### Custom diff / changes format

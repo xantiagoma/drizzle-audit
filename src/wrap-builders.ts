@@ -9,6 +9,8 @@ import type {
   TablesConfig,
   DataMode,
   AuditTransform,
+  ShouldAuditFn,
+  ShouldAuditContext,
 } from "./types.ts";
 
 function generateId(): string {
@@ -73,16 +75,56 @@ export interface WrapContext {
   transform: AuditTransform | undefined;
   onError: AuditErrorHandler | undefined;
   batch?: { add(entries: AuditEntry[]): void };
+  globalShouldAudit?: ShouldAuditFn;
+}
+
+/**
+ * Check if this operation should be audited based on sampling config.
+ * Resolution: per-table shouldAudit → per-table sample → global shouldAudit → true
+ */
+function checkShouldAudit(wctx: WrapContext, action: string, rowId: string | null): boolean {
+  const ctx = resolveContext();
+  const shouldAuditCtx: ShouldAuditContext = {
+    tableName: wctx.tableName,
+    action,
+    rowId,
+    userId: ctx.userId,
+    metadata: ctx.metadata ?? null,
+  };
+
+  // Per-table shouldAudit or sample
+  if (
+    wctx.tablesConfig &&
+    typeof wctx.tablesConfig === "object" &&
+    !Array.isArray(wctx.tablesConfig) &&
+    !("exclude" in wctx.tablesConfig)
+  ) {
+    const tableConfig = wctx.tablesConfig[wctx.tableName];
+    if (tableConfig && tableConfig !== true) {
+      if (tableConfig.shouldAudit) return tableConfig.shouldAudit(shouldAuditCtx);
+      if (tableConfig.sample !== undefined) return Math.random() < tableConfig.sample;
+    }
+  }
+
+  // Global shouldAudit
+  if (wctx.globalShouldAudit) return wctx.globalShouldAudit(shouldAuditCtx);
+
+  return true;
 }
 
 async function writeEntries(ctx: WrapContext, entries: AuditEntry[]): Promise<void> {
   if (entries.length === 0) return;
+
+  // Apply sampling/shouldAudit filter
+  const filtered = entries.filter((entry) => checkShouldAudit(ctx, entry.action, entry.rowId));
+  if (filtered.length === 0) return;
+
   if (ctx.batch) {
-    ctx.batch.add(entries);
+    ctx.batch.add(filtered);
     return;
   }
   try {
-    await ctx.storage.write(entries);
+    await ctx.storage.write(filtered);
   } catch (error) {
     const handler = ctx.onError ?? "warn";
     if (handler === "throw") throw error;

@@ -211,7 +211,14 @@ export function withDrizzleAudit<Q>(db: Q, options: DrizzleAuditOptions): Q & Au
 }
 
 function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
-  const { storage, tables: tablesConfig, dataMode: globalDataMode, transform, onError } = options;
+  const {
+    storage,
+    tables: tablesConfig,
+    dataMode: globalDataMode,
+    transform,
+    onError,
+    shouldAudit: globalShouldAudit,
+  } = options;
   const flushMode = options.flushMode ?? "immediate";
   const batch = flushMode === "batch" ? createBatchBuffer(storage, onError) : undefined;
 
@@ -258,6 +265,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             transform,
             onError,
             batch,
+            globalShouldAudit,
           };
           return wrapInsertBuilder(builder, wctx, target, table);
         };
@@ -278,6 +286,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             transform,
             onError,
             batch,
+            globalShouldAudit,
           };
           return wrapUpdateBuilder(target.update(table), wctx, target, table);
         };
@@ -298,6 +307,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             transform,
             onError,
             batch,
+            globalShouldAudit,
           };
           return wrapDeleteBuilder(target.delete(table), wctx, target, table);
         };

@@ -153,11 +153,65 @@ export type AuditTransform = (entry: AuditEntry) => AuditEntry;
  * }
  * ```
  */
+/**
+ * Context passed to {@link ShouldAuditFn} to decide whether to audit an operation.
+ * Available before diff/transforms are computed (lightweight).
+ */
+export interface ShouldAuditContext {
+  /** The table being operated on */
+  tableName: string;
+  /** The action: `'INSERT'`, `'UPDATE'`, `'DELETE'`, or custom */
+  action: string;
+  /** Primary key of the row (if available at decision time) */
+  rowId: string | null;
+  /** Current user from audit context */
+  userId: string | null;
+  /** Current metadata from audit context */
+  metadata: Record<string, unknown> | null;
+}
+
+/**
+ * Function that decides whether a specific operation should be audited.
+ * Return `true` to audit, `false` to skip.
+ *
+ * Called **before** diff computation and transforms — skipping avoids all overhead.
+ *
+ * @example
+ * ```ts
+ * // Always audit deletes, sample 10% of inserts
+ * const shouldAudit: ShouldAuditFn = (ctx) => {
+ *   if (ctx.action === 'DELETE') return true
+ *   return Math.random() < 0.1
+ * }
+ * ```
+ */
+export type ShouldAuditFn = (context: ShouldAuditContext) => boolean;
+
 export interface TableAuditConfig {
   /** Override the global `dataMode` for this table */
   dataMode?: DataMode;
   /** Transforms to apply to entries for this table */
   transforms?: AuditTransform[];
+  /**
+   * Custom function to decide whether to audit each operation.
+   * Takes priority over `sample`. Default: always audit.
+   *
+   * @example
+   * ```ts
+   * shouldAudit: (ctx) => ctx.action === 'DELETE' || Math.random() < 0.3
+   * ```
+   */
+  shouldAudit?: ShouldAuditFn;
+  /**
+   * Shorthand for random percentage sampling. `0.3` = audit 30% of operations.
+   * Ignored if `shouldAudit` is also set.
+   *
+   * @example
+   * ```ts
+   * tables: { pageViews: { sample: 0.1 } }
+   * ```
+   */
+  sample?: number;
 }
 
 /** Configuration to exclude specific tables from auditing */
@@ -353,6 +407,20 @@ export interface DrizzleAuditOptions {
   onError?: AuditErrorHandler;
   /** When to write entries to storage. Default: `'immediate'` */
   flushMode?: FlushMode;
+  /**
+   * Global function to decide whether to audit each operation.
+   * Per-table `shouldAudit` or `sample` takes priority over this.
+   * Default: always audit.
+   *
+   * @example
+   * ```ts
+   * shouldAudit: (ctx) => {
+   *   if (ctx.userId === 'admin') return true // always audit admins
+   *   return Math.random() < 0.5
+   * }
+   * ```
+   */
+  shouldAudit?: ShouldAuditFn;
   /**
    * Custom metadata merge function. Default uses `defu` (deep merge, arrays replaced).
    *
