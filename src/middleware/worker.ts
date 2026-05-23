@@ -79,9 +79,9 @@ export function drizzleAuditHandler<TArgs extends any[], TReturn>(
   resolver: (...args: TArgs) => DrizzleAuditContext | Promise<DrizzleAuditContext>,
   handler: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => Promise<Awaited<TReturn>> {
-  return async (...args: TArgs) => {
+  return async (...args: TArgs): Promise<Awaited<TReturn>> => {
     const ctx = await resolver(...args);
-    return auditStorage.run(ctx, () => handler(...args)) as Promise<Awaited<TReturn>>;
+    return auditStorage.run(ctx, () => handler(...args)) as Awaited<TReturn>;
   };
 }
 
@@ -107,7 +107,7 @@ export function drizzleAuditWrap<TArgs extends any[], TReturn>(
   context: DrizzleAuditContext,
   handler: (...args: TArgs) => TReturn,
 ): (...args: TArgs) => Promise<Awaited<TReturn>> {
-  return async (...args: TArgs) => {
-    return auditStorage.run(context, () => handler(...args)) as Promise<Awaited<TReturn>>;
+  return async (...args: TArgs): Promise<Awaited<TReturn>> => {
+    return auditStorage.run(context, () => handler(...args)) as Awaited<TReturn>;
   };
 }

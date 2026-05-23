@@ -32,7 +32,7 @@ describe("pgAuditTable", () => {
     const table = pgAuditTable();
     const columns = getTableColumns(table);
     for (const col of EXPECTED_COLUMNS) {
-      expect(columns[col], `missing column: ${col}`).toBeDefined();
+      expect((columns as any)[col], `missing column: ${col}`).toBeDefined();
     }
   });
 
@@ -69,7 +69,7 @@ describe("pgAuditTable", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.tenantId).toBeDefined();
+    expect((columns as any).tenantId).toBeDefined();
   });
 });
 
@@ -88,7 +88,7 @@ describe("sqliteAuditTable", () => {
     const table = sqliteAuditTable();
     const columns = getTableColumns(table);
     for (const col of EXPECTED_COLUMNS) {
-      expect(columns[col], `missing column: ${col}`).toBeDefined();
+      expect((columns as any)[col], `missing column: ${col}`).toBeDefined();
     }
   });
 
@@ -109,7 +109,7 @@ describe("sqliteAuditTable", () => {
     const columns = getTableColumns(table);
     // changes, oldData, newData, metadata should be text with json mode
     for (const col of ["changes", "oldData", "newData", "metadata"]) {
-      expect((columns[col] as any).columnType).toBe("SQLiteTextJson");
+      expect(((columns as any)[col]).columnType).toBe("SQLiteTextJson");
     }
   });
 
@@ -127,7 +127,7 @@ describe("sqliteAuditTable", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.tenantId).toBeDefined();
+    expect((columns as any).tenantId).toBeDefined();
   });
 });
 
@@ -146,7 +146,7 @@ describe("mysqlAuditTable", () => {
     const table = mysqlAuditTable();
     const columns = getTableColumns(table);
     for (const col of EXPECTED_COLUMNS) {
-      expect(columns[col], `missing column: ${col}`).toBeDefined();
+      expect((columns as any)[col], `missing column: ${col}`).toBeDefined();
     }
   });
 
@@ -166,7 +166,7 @@ describe("mysqlAuditTable", () => {
     const table = mysqlAuditTable();
     const columns = getTableColumns(table);
     for (const col of ["changes", "oldData", "newData", "metadata"]) {
-      expect((columns[col] as any).columnType).toBe("MySqlJson");
+      expect(((columns as any)[col]).columnType).toBe("MySqlJson");
     }
   });
 
@@ -191,7 +191,7 @@ describe("mysqlAuditTable", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.tenantId).toBeDefined();
+    expect((columns as any).tenantId).toBeDefined();
   });
 });
 
@@ -204,7 +204,7 @@ describe("pgAuditTable - $defaultFn", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.env).toBeDefined();
+    expect((columns as any).env).toBeDefined();
   });
 });
 
@@ -243,7 +243,7 @@ describe("sqliteAuditTable - defaultFn closures", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.env).toBeDefined();
+    expect((columns as any).env).toBeDefined();
   });
 });
 
@@ -272,7 +272,7 @@ describe("mysqlAuditTable - defaultFn closures", () => {
       }),
     });
     const columns = getTableColumns(table);
-    expect(columns.env).toBeDefined();
+    expect((columns as any).env).toBeDefined();
   });
 });
 

@@ -112,7 +112,7 @@ describe("drizzleAuditHandler", () => {
 
   test("preserves handler return value", async () => {
     const handler = drizzleAuditHandler(
-      () => ({ userId: null }),
+      (_x: number, _y: number) => ({ userId: null }),
       async (x: number, y: number) => x + y,
     );
 
