@@ -1,6 +1,5 @@
 # Changelog
 
-
 ## v0.1.1
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.0...v0.1.1)
@@ -18,4 +17,3 @@
 ### ❤️ Contributors
 
 - Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
-
