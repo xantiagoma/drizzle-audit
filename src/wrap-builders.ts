@@ -118,9 +118,12 @@ function applyTransforms(entry: AuditEntry, ctx: WrapContext): AuditEntry {
   return result;
 }
 
+/** Execution methods that sync SQLite drivers use */
+const EXEC_METHODS = ["run", "all", "get", "execute", "then"] as const;
+
 /**
  * Intercepts .then() on a builder to run audit logic after execution.
- * Works whether .returning() was called or not.
+ * Works for async drivers (PG, libsql, etc.)
  */
 function interceptThen(
   target: any,
@@ -132,6 +135,22 @@ function interceptThen(
       return result;
     });
     return promise.then(onFulfilled, onRejected);
+  };
+}
+
+/**
+ * Intercepts a sync execution method (.run(), .all(), .get(), .execute())
+ * to run audit logic after execution. For sync SQLite drivers.
+ */
+function interceptSync(
+  target: any,
+  method: string,
+  auditFn: (result: any) => void,
+): (...args: any[]) => any {
+  return (...args: any[]) => {
+    const result = target[method](...args);
+    auditFn(result);
+    return result;
   };
 }
 
@@ -189,9 +208,9 @@ function wrapInsertValues(builder: any, wctx: WrapContext, db: any, table: Table
         };
       }
 
-      // Intercept .then() when NO .returning() — audit with the values data
-      if (prop === "then" && !hasReturning) {
-        return interceptThen(target, async () => {
+      // Intercept execution methods when NO .returning()
+      if (!hasReturning && (EXEC_METHODS as readonly string[]).includes(prop as string)) {
+        const auditFn = () => {
           const rows = Array.isArray(valuesData) ? valuesData : [valuesData];
           const entries: AuditEntry[] = [];
           for (const row of rows) {
@@ -200,8 +219,13 @@ function wrapInsertValues(builder: any, wctx: WrapContext, db: any, table: Table
             entry = applyTransforms(entry, wctx);
             entries.push(entry);
           }
-          await writeEntries(wctx, entries);
-        });
+          writeEntries(wctx, entries);
+        };
+
+        if (prop === "then") {
+          return interceptThen(target, async () => auditFn());
+        }
+        return interceptSync(target, prop as string, auditFn);
       }
 
       return Reflect.get(target, prop, receiver);
@@ -318,7 +342,42 @@ function wrapUpdateWhere(
         };
       }
 
-      // Without .returning() — SELECT before + after to capture old/new
+      // Without .returning() — intercept execution (sync or async)
+      if (
+        !hasReturning &&
+        (EXEC_METHODS as readonly string[]).includes(prop as string) &&
+        prop !== "then"
+      ) {
+        const whereClause = getWhere();
+        return (...args: any[]) => {
+          const oldRows = whereClause ? db.select().from(table).where(whereClause).all() : [];
+          const result = target[prop](...args);
+          const newRows = whereClause ? db.select().from(table).where(whereClause).all() : [];
+
+          const entries: AuditEntry[] = [];
+          const maxLen = Math.max(oldRows.length, newRows.length);
+          for (let i = 0; i < maxLen; i++) {
+            const oldRow = oldRows[i] ?? null;
+            const newRow = newRows[i] ?? null;
+            const rowId = extractRowId(newRow ?? oldRow, wctx.pkColumns);
+            let entry = buildAuditEntry(
+              "UPDATE",
+              wctx.tableName,
+              rowId,
+              oldRow,
+              newRow,
+              wctx.dataMode,
+            );
+            if (!entry.changes && !entry.oldData && !entry.newData) continue;
+            entry = applyTransforms(entry, wctx);
+            entries.push(entry);
+          }
+          writeEntries(wctx, entries);
+          return result;
+        };
+      }
+
+      // Async path (.then())
       if (prop === "then" && !hasReturning) {
         const whereClause = getWhere();
         return (onFulfilled: any, onRejected: any) => {
@@ -437,7 +496,36 @@ function wrapDeleteWhere(
         };
       }
 
-      // Without .returning() — SELECT old data before, then let delete run
+      // Without .returning() — sync execution
+      if (
+        !hasReturning &&
+        (EXEC_METHODS as readonly string[]).includes(prop as string) &&
+        prop !== "then"
+      ) {
+        const whereClause = getWhere();
+        return (...args: any[]) => {
+          const oldRows = whereClause ? db.select().from(table).where(whereClause).all() : [];
+          const result = target[prop](...args);
+          const entries: AuditEntry[] = [];
+          for (const oldRow of oldRows) {
+            const rowId = extractRowId(oldRow, wctx.pkColumns);
+            let entry = buildAuditEntry(
+              "DELETE",
+              wctx.tableName,
+              rowId,
+              oldRow,
+              null,
+              wctx.dataMode,
+            );
+            entry = applyTransforms(entry, wctx);
+            entries.push(entry);
+          }
+          writeEntries(wctx, entries);
+          return result;
+        };
+      }
+
+      // Async path (.then())
       if (prop === "then" && !hasReturning) {
         const whereClause = getWhere();
         return (onFulfilled: any, onRejected: any) => {

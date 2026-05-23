@@ -80,7 +80,11 @@ export function drizzleTableStorage(
           newData: entry.newData,
           userId: entry.userId,
           metadata: entry.metadata,
-          timestamp: entry.timestamp,
+          // Don't pass timestamp — let the column's default handle it.
+          // PG/MySQL: defaultNow() generates a DB-level timestamp.
+          // SQLite: $defaultFn(() => new Date().toISOString()) generates a string.
+          // Passing entry.timestamp (a Date object) would fail on SQLite's bun:sqlite
+          // driver which can't bind Date objects.
         })),
       );
     },
