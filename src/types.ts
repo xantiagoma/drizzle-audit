@@ -172,20 +172,29 @@ export interface ShouldAuditContext {
 
 /**
  * Function that decides whether a specific operation should be audited.
- * Return `true` to audit, `false` to skip.
+ * Return `true` to audit, `false` to skip. Can be sync or async.
  *
  * Called **before** diff computation and transforms — skipping avoids all overhead.
  *
  * @example
  * ```ts
- * // Always audit deletes, sample 10% of inserts
- * const shouldAudit: ShouldAuditFn = (ctx) => {
- *   if (ctx.action === 'DELETE') return true
- *   return Math.random() < 0.1
+ * // Sync: sample 10%
+ * const shouldAudit: ShouldAuditFn = (ctx) => Math.random() < 0.1
+ *
+ * // Async: check feature flag service
+ * const shouldAudit: ShouldAuditFn = async (ctx) => {
+ *   const flag = await featureFlags.get('audit-enabled')
+ *   return flag === true
+ * }
+ *
+ * // Async: check KV store
+ * const shouldAudit: ShouldAuditFn = async (ctx) => {
+ *   const disabled = await kv.get(`audit:disabled:${ctx.tableName}`)
+ *   return !disabled
  * }
  * ```
  */
-export type ShouldAuditFn = (context: ShouldAuditContext) => boolean;
+export type ShouldAuditFn = (context: ShouldAuditContext) => boolean | Promise<boolean>;
 
 export interface TableAuditConfig {
   /** Override the global `dataMode` for this table */

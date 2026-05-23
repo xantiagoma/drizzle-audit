@@ -168,6 +168,31 @@ describe("sampling - global shouldAudit", () => {
   });
 });
 
+describe("sampling - async shouldAudit", () => {
+  test("supports async shouldAudit function", async () => {
+    const entries: AuditEntry[] = [];
+    const db = withDrizzleAudit(await createTestDb(), {
+      storage: callbackStorage((e) => {
+        entries.push(...e);
+      }),
+      shouldAudit: async (ctx) => {
+        // Simulate async check (KV store, feature flag, etc.)
+        await new Promise((r) => setTimeout(r, 5));
+        return ctx.action === "DELETE";
+      },
+    });
+
+    await db.insert(users).values({ name: "Alice", email: "a@x.com" }).returning();
+    await db
+      .delete(users)
+      .where(sql`id = 1`)
+      .returning();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.action).toBe("DELETE");
+  });
+});
+
 describe("sampling helpers", () => {
   test("sampleRate(0) never audits", () => {
     const fn = sampleRate(0);

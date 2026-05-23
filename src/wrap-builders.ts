@@ -82,7 +82,11 @@ export interface WrapContext {
  * Check if this operation should be audited based on sampling config.
  * Resolution: per-table shouldAudit → per-table sample → global shouldAudit → true
  */
-function checkShouldAudit(wctx: WrapContext, action: string, rowId: string | null): boolean {
+function checkShouldAudit(
+  wctx: WrapContext,
+  action: string,
+  rowId: string | null,
+): boolean | Promise<boolean> {
   const ctx = resolveContext();
   const shouldAuditCtx: ShouldAuditContext = {
     tableName: wctx.tableName,
@@ -116,7 +120,25 @@ async function writeEntries(ctx: WrapContext, entries: AuditEntry[]): Promise<vo
   if (entries.length === 0) return;
 
   // Apply sampling/shouldAudit filter
-  const filtered = entries.filter((entry) => checkShouldAudit(ctx, entry.action, entry.rowId));
+  const filtered: AuditEntry[] = [];
+  let hasAsync = false;
+  const results: (boolean | Promise<boolean>)[] = [];
+  for (const entry of entries) {
+    const result = checkShouldAudit(ctx, entry.action, entry.rowId);
+    if (result instanceof Promise) hasAsync = true;
+    results.push(result);
+  }
+
+  if (hasAsync) {
+    const resolved = await Promise.all(results);
+    for (let i = 0; i < entries.length; i++) {
+      if (resolved[i]) filtered.push(entries[i]!);
+    }
+  } else {
+    for (let i = 0; i < entries.length; i++) {
+      if (results[i] as boolean) filtered.push(entries[i]!);
+    }
+  }
   if (filtered.length === 0) return;
 
   if (ctx.batch) {
