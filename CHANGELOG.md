@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.3
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.2...v0.1.3)
+
+### 📖 Documentation
+
+- Update README/CLAUDE.md for withContext merge + newContext ([fa91bc2](https://github.com/xantiagoma/drizzle-audit/commit/fa91bc2))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.2
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.1...v0.1.2)
