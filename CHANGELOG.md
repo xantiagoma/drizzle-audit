@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.7
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.6...v0.1.7)
+
+### 🚀 Enhancements
+
+- Sampling / shouldAudit for selective auditing ([de8e763](https://github.com/xantiagoma/drizzle-audit/commit/de8e763))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.6
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.5...v0.1.6)
