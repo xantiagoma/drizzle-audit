@@ -22,6 +22,7 @@ export type {
   AuditTransform,
   AuditErrorHandler,
   FlushMode,
+  MetadataMergeFn,
   TablesConfig,
   TableAuditConfig,
 } from "./types.ts";

@@ -239,6 +239,9 @@
     "example:mongo": "bun examples/mongo/server.ts",
     "example:express": "bun examples/express-mysql-sqlite/server.ts"
   },
+  "dependencies": {
+    "defu": "^6.1.7"
+  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.4.5",
     "@types/express": "^5.0.6",

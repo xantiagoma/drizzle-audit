@@ -150,6 +150,23 @@ describe("db.$audit namespace", () => {
     expect((entries[0]!.metadata as any).ip).toBeUndefined(); // NOT inherited
   });
 
+  test("custom metadataMerge function is used", async () => {
+    // Custom shallow merge (no deep merge)
+    const db = withDrizzleAudit(await createTestDb(), {
+      storage,
+      metadataMerge: (override, base) => ({ ...base, ...override }),
+    });
+
+    await db.$audit.withContext({ userId: "u_1", metadata: { nested: { a: 1 } } }, async () => {
+      await db.$audit.withContext({ metadata: { nested: { b: 2 } } }, async () => {
+        await db.$audit.action({ action: "CUSTOM_MERGE_TEST" });
+      });
+    });
+
+    // With shallow merge, nested object is replaced entirely
+    expect((entries[0]!.metadata as any).nested).toEqual({ b: 2 }); // NOT { a: 1, b: 2 }
+  });
+
   test("$audit.withContext merges with existing context", async () => {
     const db = withDrizzleAudit(await createTestDb(), { storage });
 

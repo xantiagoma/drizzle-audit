@@ -209,6 +209,41 @@ export type AuditErrorHandler =
   | "ignore"
   | ((error: unknown, entries: AuditEntry[]) => void);
 
+// --- Metadata Merge ---
+
+/**
+ * Function that deep merges two metadata objects. Override values take priority.
+ * Used by `withContext` and `addMetadata` to merge nested metadata.
+ *
+ * Default implementation uses `defu` (deep merge with override semantics,
+ * arrays replaced not concatenated).
+ *
+ * @param override - New values (take priority)
+ * @param base - Existing values (filled in where override is missing)
+ * @returns Merged metadata object
+ *
+ * @example
+ * ```ts
+ * // Use deepmerge-ts instead of default defu
+ * import { deepmerge } from "deepmerge-ts";
+ *
+ * const db = withDrizzleAudit(rawDb, {
+ *   storage,
+ *   metadataMerge: (override, base) => deepmerge(base, override),
+ * })
+ *
+ * // Or disable deep merge entirely (shallow only)
+ * const db = withDrizzleAudit(rawDb, {
+ *   storage,
+ *   metadataMerge: (override, base) => ({ ...base, ...override }),
+ * })
+ * ```
+ */
+export type MetadataMergeFn = (
+  override: Record<string, unknown>,
+  base: Record<string, unknown>,
+) => Record<string, unknown>;
+
 // --- Flush Mode ---
 
 /**
@@ -274,4 +309,16 @@ export interface DrizzleAuditOptions {
   onError?: AuditErrorHandler;
   /** When to write entries to storage. Default: `'immediate'` */
   flushMode?: FlushMode;
+  /**
+   * Custom metadata merge function. Default uses `defu` (deep merge, arrays replaced).
+   * Override to use a different merge strategy.
+   *
+   * @example
+   * ```ts
+   * // Use deepmerge-ts
+   * import { deepmerge } from "deepmerge-ts";
+   * metadataMerge: (override, base) => deepmerge(base, override)
+   * ```
+   */
+  metadataMerge?: MetadataMergeFn;
 }

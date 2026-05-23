@@ -270,6 +270,39 @@ await db.$audit.newContext({ userId: null, metadata: { trigger: "cron" } }, asyn
 db.$audit.addMetadata({ requestId: "req_1", operation: "create-order" });
 ```
 
+### Deep merge behavior
+
+Metadata is **deep merged** — nested objects are merged recursively, not replaced:
+
+```ts
+// Outer: { metadata: { request: { id: "r_1", method: "GET" } } }
+await db.$audit.withContext({ metadata: { request: { path: "/api" } } }, async () => {
+  // Result: { metadata: { request: { id: "r_1", method: "GET", path: "/api" } } }
+  // All three fields preserved — not replaced!
+});
+```
+
+Arrays and non-object values are replaced entirely (not concatenated).
+
+**Custom merge strategy:**
+
+The merge function is pluggable via the `metadataMerge` option:
+
+```ts
+// Use deepmerge-ts instead
+import { deepmerge } from "deepmerge-ts";
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  metadataMerge: (override, base) => deepmerge(base, override),
+});
+
+// Or disable deep merge entirely (shallow only)
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  metadataMerge: (override, base) => ({ ...base, ...override }),
+});
+```
+
 ### Standalone imports
 
 ```ts

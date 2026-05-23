@@ -5,6 +5,7 @@ import {
   withDrizzleAuditContext,
   newDrizzleAuditContext,
   addDrizzleAuditMetadata,
+  _setMetadataMerge,
 } from "./context.ts";
 import { buildChanges } from "./diff.ts";
 import { _setGlobalStorage } from "./audit-action-internal.ts";
@@ -355,6 +356,8 @@ export interface AuditedDb {
 export function withDrizzleAudit<Q>(db: Q, options: DrizzleAuditOptions): Q & AuditedDb {
   // Register global storage so drizzleAuditAction() and trackAction() can use it
   _setGlobalStorage(options.storage, options.onError);
+  // Register custom metadata merge function if provided
+  _setMetadataMerge(options.metadataMerge);
   return _wrapDbProxy(db, options) as Q & AuditedDb;
 }
 

@@ -94,6 +94,52 @@ describe("withDrizzleAuditContext", () => {
     expect(results).toContain("a");
     expect(results).toContain("b");
   });
+
+  test("deep merges nested metadata objects", async () => {
+    await withDrizzleAuditContext(
+      { userId: "u_1", metadata: { request: { id: "r_1", method: "GET" }, ip: "1.2.3.4" } },
+      async () => {
+        await withDrizzleAuditContext(
+          { metadata: { request: { path: "/api/users" }, extra: "data" } },
+          async () => {
+            const ctx = useDrizzleAuditContext()!;
+            // request should be deep merged, not replaced
+            expect((ctx.metadata as any).request).toEqual({
+              id: "r_1",
+              method: "GET",
+              path: "/api/users",
+            });
+            expect((ctx.metadata as any).ip).toBe("1.2.3.4"); // preserved
+            expect((ctx.metadata as any).extra).toBe("data"); // added
+          },
+        );
+      },
+    );
+  });
+
+  test("deep merge: override scalar values in nested objects", async () => {
+    await withDrizzleAuditContext(
+      { userId: "u_1", metadata: { config: { theme: "dark", lang: "en" } } },
+      async () => {
+        await withDrizzleAuditContext({ metadata: { config: { theme: "light" } } }, async () => {
+          const ctx = useDrizzleAuditContext()!;
+          expect((ctx.metadata as any).config).toEqual({
+            theme: "light", // overridden
+            lang: "en", // preserved
+          });
+        });
+      },
+    );
+  });
+
+  test("deep merge: arrays are replaced, not concatenated", async () => {
+    await withDrizzleAuditContext({ userId: "u_1", metadata: { tags: ["a", "b"] } }, async () => {
+      await withDrizzleAuditContext({ metadata: { tags: ["c"] } }, async () => {
+        const ctx = useDrizzleAuditContext()!;
+        expect((ctx.metadata as any).tags).toEqual(["c"]); // replaced entirely
+      });
+    });
+  });
 });
 
 describe("newDrizzleAuditContext", () => {
@@ -129,6 +175,21 @@ describe("addDrizzleAuditMetadata", () => {
 
   test("does nothing when no context is active", () => {
     expect(() => addDrizzleAuditMetadata({ foo: "bar" })).not.toThrow();
+  });
+
+  test("deep merges nested metadata", async () => {
+    await withDrizzleAuditContext(
+      { userId: "u_1", metadata: { request: { id: "r_1", method: "GET" } } },
+      async () => {
+        addDrizzleAuditMetadata({ request: { path: "/api" } });
+        const ctx = useDrizzleAuditContext()!;
+        expect((ctx.metadata as any).request).toEqual({
+          id: "r_1",
+          method: "GET",
+          path: "/api",
+        });
+      },
+    );
   });
 });
 

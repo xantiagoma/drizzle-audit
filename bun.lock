@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "drizzle-audit",
+      "dependencies": {
+        "defu": "^6.1.7",
+      },
       "devDependencies": {
         "@electric-sql/pglite": "^0.4.5",
         "@types/express": "^5.0.6",

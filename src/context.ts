@@ -1,5 +1,42 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { DrizzleAuditContext } from "./types.ts";
+import { createDefu } from "defu";
+import type { DrizzleAuditContext, MetadataMergeFn } from "./types.ts";
+
+// --- Default merge strategy (defu with array replacement) ---
+
+const defaultMerge = createDefu((obj, key, value) => {
+  if (Array.isArray(value)) {
+    (obj as any)[key] = value;
+    return true;
+  }
+});
+
+const defaultMetadataMerge: MetadataMergeFn = (override, base) =>
+  defaultMerge(override, base) as Record<string, unknown>;
+
+// --- Global merge function (configurable via withDrizzleAudit options) ---
+
+let _mergeFn: MetadataMergeFn = defaultMetadataMerge;
+
+/**
+ * Set the global metadata merge function. Called by `withDrizzleAudit`.
+ * @internal
+ */
+export function _setMetadataMerge(fn: MetadataMergeFn | undefined): void {
+  _mergeFn = fn ?? defaultMetadataMerge;
+}
+
+function mergeMetadata(
+  override: Record<string, unknown> | null | undefined,
+  base: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!override && !base) return null;
+  if (!override) return base ? { ...base } : null;
+  if (!base) return { ...override };
+  return _mergeFn(override, base);
+}
+
+// --- AsyncLocalStorage ---
 
 const ALS_KEY = Symbol.for("drizzle-audit:als");
 
@@ -53,24 +90,19 @@ export function getDrizzleAuditContext(): DrizzleAuditContext {
 }
 
 /**
- * Run a function within an audit context scope.
- * The context is automatically cleaned up when the function completes.
- * Contexts can be nested — inner scopes shadow outer ones.
+ * Run a function within an audit context scope that **merges** with any existing context.
+ * `userId` is overridden only if explicitly provided. Metadata is deep merged.
  *
- * @param context - The audit context to set for this scope
+ * @param context - Partial context to merge (userId optional, metadata deep merged)
  * @param fn - The async function to run within the context
  * @returns The return value of `fn`
  *
  * @example
  * ```ts
- * // Merges with existing context
- * await withDrizzleAuditContext(
- *   { userId: req.user.id, metadata: { ip: req.ip } },
- *   async () => {
- *     // If outer context had { metadata: { requestId: 'r_1' } },
- *     // inner context is { userId: req.user.id, metadata: { requestId: 'r_1', ip: req.ip } }
- *   },
- * )
+ * // Outer: { userId: "admin", metadata: { ip: "1.2.3.4" } }
+ * await withDrizzleAuditContext({ metadata: { operation: "edit" } }, async () => {
+ *   // Inner: { userId: "admin", metadata: { ip: "1.2.3.4", operation: "edit" } }
+ * })
  * ```
  */
 export async function withDrizzleAuditContext<T>(
@@ -80,7 +112,7 @@ export async function withDrizzleAuditContext<T>(
   const existing = auditStorage.getStore();
   const merged: DrizzleAuditContext = {
     userId: context.userId !== undefined ? context.userId : (existing?.userId ?? null),
-    metadata: { ...existing?.metadata, ...context.metadata },
+    metadata: mergeMetadata(context.metadata, existing?.metadata),
   };
   return auditStorage.run(merged, fn);
 }
@@ -90,20 +122,16 @@ export async function withDrizzleAuditContext<T>(
  * Use this when you want to start clean (e.g. a system action that should not
  * inherit the current user's context).
  *
- * For merging with existing context, use {@link withDrizzleAuditContext} instead.
- *
  * @param context - The audit context to set (replaces any existing context)
  * @param fn - The async function to run within the context
  * @returns The return value of `fn`
  *
  * @example
  * ```ts
- * // Inside a user request, run a system action with clean context
  * await newDrizzleAuditContext(
  *   { userId: null, metadata: { trigger: 'system' } },
  *   async () => {
- *     // No userId from the outer request leaks in
- *     await db.delete(expiredTokens).where(...)
+ *     // Clean context — nothing from outer request leaks in
  *   },
  * )
  * ```
@@ -116,21 +144,20 @@ export async function newDrizzleAuditContext<T>(
 }
 
 /**
- * Merge additional metadata into the current audit context.
+ * Merge additional metadata into the current audit context (deep merge).
  * Does nothing if no context is active.
  *
- * @param metadata - Key-value pairs to merge into existing metadata
+ * @param metadata - Key-value pairs to deep merge into existing metadata
  *
  * @example
  * ```ts
- * // In a request handler, after middleware sets the base context
  * addDrizzleAuditMetadata({ operation: 'create-order', orderId: 'ord_123' })
  * ```
  */
 export function addDrizzleAuditMetadata(metadata: Record<string, unknown>): void {
   const ctx = auditStorage.getStore();
   if (ctx) {
-    ctx.metadata = { ...ctx.metadata, ...metadata };
+    ctx.metadata = mergeMetadata(metadata, ctx.metadata);
   }
 }
 
@@ -150,7 +177,7 @@ export function resolveContext(explicit?: Partial<DrizzleAuditContext>): Drizzle
   if (explicit?.userId !== undefined) {
     return {
       userId: explicit.userId,
-      metadata: { ...implicit?.metadata, ...explicit.metadata },
+      metadata: mergeMetadata(explicit.metadata, implicit?.metadata),
     };
   }
 
@@ -158,7 +185,7 @@ export function resolveContext(explicit?: Partial<DrizzleAuditContext>): Drizzle
     return {
       ...implicit,
       metadata: explicit?.metadata
-        ? { ...implicit.metadata, ...explicit.metadata }
+        ? mergeMetadata(explicit.metadata, implicit.metadata)
         : implicit.metadata,
     };
   }
