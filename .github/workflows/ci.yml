@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +34,9 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Test
+        # Covers: PG integration (PGlite, in-memory), SQLite integration (better-sqlite3, in-memory),
+        # and schema/unit tests for MySQL. No live MySQL binary is downloaded in CI because
+        # mysql-memory-server is only used in examples/ which are excluded from the test suite.
         run: bun run test
 
       - name: Build

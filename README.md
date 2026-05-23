@@ -707,6 +707,26 @@ storage: callbackStorage(async (entries) => {
 });
 ```
 
+## Event Hook (`onEntry`)
+
+React to every audit entry in real-time — before it's written to storage:
+
+```ts
+const db = withDrizzleAudit(rawDb, {
+  storage,
+  onEntry: async (entry) => {
+    // Send Slack alert on deletes
+    if (entry.action === "DELETE") {
+      await slack.send(`${entry.tableName}#${entry.rowId} deleted by ${entry.userId}`);
+    }
+    // Log to observability
+    logger.info({ audit: entry, traceId: getTraceId() });
+  },
+});
+```
+
+Errors in `onEntry` are caught and logged — they never block the storage write.
+
 ## Error Handling
 
 ```ts

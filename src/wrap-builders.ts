@@ -1,5 +1,8 @@
 import type { Table } from "drizzle-orm";
-import { getTableColumns } from "drizzle-orm";
+// Support both drizzle-orm v0 (getTableColumns) and v1 (getColumns)
+import * as drizzleOrm from "drizzle-orm";
+const getColumnsFromTable: (table: Table) => Record<string, any> =
+  (drizzleOrm as any).getColumns ?? (drizzleOrm as any).getTableColumns;
 import { resolveContext } from "./context.ts";
 import { buildChanges } from "./diff.ts";
 import type {
@@ -18,7 +21,7 @@ function generateId(): string {
 }
 
 export function getPrimaryKeyColumns(table: Table): string[] {
-  const columns = getTableColumns(table);
+  const columns = getColumnsFromTable(table);
   const pkColumns: string[] = [];
   for (const [name, column] of Object.entries(columns)) {
     if ((column as any).primary) {
@@ -76,6 +79,7 @@ export interface WrapContext {
   onError: AuditErrorHandler | undefined;
   batch?: { add(entries: AuditEntry[]): void };
   globalShouldAudit?: ShouldAuditFn;
+  onEntry?: (entry: AuditEntry) => void | Promise<void>;
 }
 
 /**
@@ -140,6 +144,17 @@ async function writeEntries(ctx: WrapContext, entries: AuditEntry[]): Promise<vo
     }
   }
   if (filtered.length === 0) return;
+
+  // Fire onEntry callback for each entry before storage write
+  if (ctx.onEntry) {
+    for (const entry of filtered) {
+      try {
+        await ctx.onEntry(entry);
+      } catch (err) {
+        console.warn("[drizzle-audit] onEntry callback threw an error:", err);
+      }
+    }
+  }
 
   if (ctx.batch) {
     ctx.batch.add(filtered);

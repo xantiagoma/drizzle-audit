@@ -163,6 +163,22 @@ export interface AuditNamespace {
   context(): DrizzleAuditContext | null;
   /** Merge metadata into the current audit context (deep merge). */
   addMetadata(metadata: Record<string, unknown>): void;
+  /**
+   * Set or replace the `onEntry` callback at runtime.
+   * Pass `undefined` to remove the current callback.
+   *
+   * @example
+   * ```ts
+   * db.$audit.setOnEntry(async (entry) => {
+   *   await alerting.send(`${entry.action} on ${entry.tableName}`);
+   * });
+   * // Later, disable it:
+   * db.$audit.setOnEntry(undefined);
+   * ```
+   */
+  setOnEntry(
+    fn: ((entry: import("./types.ts").AuditEntry) => void | Promise<void>) | undefined,
+  ): void;
 }
 
 /**
@@ -219,6 +235,8 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
     onError,
     shouldAudit: globalShouldAudit,
   } = options;
+  // onEntry is mutable so it can be changed via $audit.setOnEntry()
+  let onEntry = options.onEntry;
   const flushMode = options.flushMode ?? "immediate";
   const batch = flushMode === "batch" ? createBatchBuffer(storage, onError) : undefined;
 
@@ -242,6 +260,9 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
     newContext: newDrizzleAuditContext,
     context: useDrizzleAuditContext,
     addMetadata: addDrizzleAuditMetadata,
+    setOnEntry: (fn) => {
+      onEntry = fn;
+    },
   };
 
   return new Proxy(typedDb, {
@@ -266,6 +287,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             onError,
             batch,
             globalShouldAudit,
+            onEntry,
           };
           return wrapInsertBuilder(builder, wctx, target, table);
         };
@@ -287,6 +309,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             onError,
             batch,
             globalShouldAudit,
+            onEntry,
           };
           return wrapUpdateBuilder(target.update(table), wctx, target, table);
         };
@@ -308,6 +331,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             onError,
             batch,
             globalShouldAudit,
+            onEntry,
           };
           return wrapDeleteBuilder(target.delete(table), wctx, target, table);
         };

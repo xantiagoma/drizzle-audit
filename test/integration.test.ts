@@ -682,6 +682,136 @@ describe("withDrizzleAudit - transactions", () => {
   });
 });
 
+describe("withDrizzleAudit - onEntry callback", () => {
+  test("onEntry is called for each audit entry before storage write", async () => {
+    const { db } = await createTestDb();
+    const storage = drizzleTableStorage(auditLog, { db });
+    const captured: AuditEntry[] = [];
+
+    const auditedDb = withDrizzleAudit(db, {
+      storage,
+      onEntry: (entry) => {
+        captured.push(entry);
+      },
+    });
+
+    await auditedDb.insert(users).values({ name: "Alice", email: "a@x.com" }).returning();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.action).toBe("INSERT");
+    expect(captured[0]!.tableName).toBe("users");
+    expect(captured[0]!.id).toBeTruthy();
+    expect(captured[0]!.changes).toBeTruthy();
+
+    // Entry was also written to storage
+    const entries = await getAuditEntries(auditedDb);
+    expect(entries).toHaveLength(1);
+  });
+
+  test("async onEntry is awaited before storage write", async () => {
+    const { db } = await createTestDb();
+    const storage = drizzleTableStorage(auditLog, { db });
+    const order: string[] = [];
+
+    const auditedDb = withDrizzleAudit(db, {
+      storage: {
+        async write(entries) {
+          order.push("storage");
+          await storage.write(entries);
+        },
+      },
+      onEntry: async (_entry) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+        order.push("onEntry");
+      },
+    });
+
+    await auditedDb.insert(users).values({ name: "Bob", email: "b@x.com" }).returning();
+
+    // onEntry must have been awaited before storage.write was called
+    expect(order).toEqual(["onEntry", "storage"]);
+  });
+
+  test("error thrown in onEntry does not block the storage write", async () => {
+    const { db } = await createTestDb();
+    const storage = drizzleTableStorage(auditLog, { db });
+    const warnMessages: unknown[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnMessages.push(args);
+
+    try {
+      const auditedDb = withDrizzleAudit(db, {
+        storage,
+        onEntry: () => {
+          throw new Error("onEntry boom");
+        },
+      });
+
+      // Should not throw
+      await auditedDb.insert(users).values({ name: "Charlie", email: "c@x.com" }).returning();
+
+      // Entry was still written despite the callback error
+      const entries = await getAuditEntries(auditedDb);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.action).toBe("INSERT");
+
+      // A warning was logged
+      expect(warnMessages.some((m) => String(m).includes("onEntry"))).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  test("onEntry receives fully-transformed entry data including userId and metadata", async () => {
+    const { db } = await createTestDb();
+    const storage = drizzleTableStorage(auditLog, { db });
+    const captured: AuditEntry[] = [];
+
+    const auditedDb = withDrizzleAudit(db, {
+      storage,
+      transform: (entry) => ({ ...entry, metadata: { ...entry.metadata, env: "test" } }),
+      onEntry: (entry) => {
+        captured.push(entry);
+      },
+    });
+
+    await withDrizzleAuditContext({ userId: "u_42", metadata: { ip: "9.9.9.9" } }, async () => {
+      await auditedDb.insert(users).values({ name: "Dave", email: "d@x.com" }).returning();
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.userId).toBe("u_42");
+    // Receives the post-transform entry, so the global transform's env field is present
+    expect((captured[0]!.metadata as any).env).toBe("test");
+    expect((captured[0]!.metadata as any).ip).toBe("9.9.9.9");
+  });
+
+  test("setOnEntry replaces the callback at runtime", async () => {
+    const { db } = await createTestDb();
+    const storage = drizzleTableStorage(auditLog, { db });
+    const firstCalls: string[] = [];
+    const secondCalls: string[] = [];
+
+    const auditedDb = withDrizzleAudit(db, {
+      storage,
+      onEntry: (entry) => {
+        firstCalls.push(entry.action);
+      },
+    });
+
+    await auditedDb.insert(users).values({ name: "Eve", email: "e@x.com" }).returning();
+
+    auditedDb.$audit.setOnEntry((entry) => {
+      secondCalls.push(entry.action);
+    });
+
+    await auditedDb.insert(users).values({ name: "Frank", email: "f@x.com" }).returning();
+
+    expect(firstCalls).toEqual(["INSERT"]);
+    expect(secondCalls).toEqual(["INSERT"]);
+  });
+});
+
 describe("consoleStorage", () => {
   test("logs entries to provided logger", async () => {
     const { consoleStorage } = await import("../src/storage/console.ts");

@@ -454,4 +454,40 @@ export interface DrizzleAuditOptions {
    * ```
    */
   computeChanges?: ComputeChangesFn;
+  /**
+   * Callback fired for **every** audit entry before it is written to storage.
+   * Called after transforms have been applied, once per entry.
+   *
+   * Use it for real-time alerts, enrichment, side-effect logging, or custom
+   * filtering. If the callback is async it is awaited before the write
+   * proceeds. Errors thrown inside `onEntry` are caught and logged as
+   * warnings — they do **not** block the storage write.
+   *
+   * @param entry - The fully-transformed {@link AuditEntry} about to be stored.
+   *
+   * @example
+   * ```ts
+   * // Send a Slack alert on every DELETE
+   * const db = withDrizzleAudit(rawDb, {
+   *   storage,
+   *   onEntry: async (entry) => {
+   *     if (entry.action === "DELETE") {
+   *       await slack.chat.postMessage({
+   *         channel: "#audit-alerts",
+   *         text: `Row ${entry.rowId} deleted from ${entry.tableName} by ${entry.userId}`,
+   *       });
+   *     }
+   *   },
+   * });
+   *
+   * // Enrich entries with a request-scoped trace ID
+   * const db = withDrizzleAudit(rawDb, {
+   *   storage,
+   *   onEntry: (entry) => {
+   *     logger.info({ auditEntry: entry, traceId: getTraceId() });
+   *   },
+   * });
+   * ```
+   */
+  onEntry?: (entry: AuditEntry) => void | Promise<void>;
 }
