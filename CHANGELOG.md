@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.2
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.1...v0.1.2)
+
+### 🚀 Enhancements
+
+- WithContext merges, newContext replaces ([8930ef0](https://github.com/xantiagoma/drizzle-audit/commit/8930ef0))
+
+### 🏡 Chore
+
+- Format changelog ([e7448fd](https://github.com/xantiagoma/drizzle-audit/commit/e7448fd))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.1
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.0...v0.1.1)
