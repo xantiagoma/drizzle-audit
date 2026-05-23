@@ -1,11 +1,262 @@
 {
   "name": "drizzle-audit",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "Configurable audit logging for Drizzle ORM",
+  "keywords": [
+    "audit",
+    "audit-log",
+    "audit-trail",
+    "changelog",
+    "database",
+    "drizzle",
+    "drizzle-orm",
+    "history",
+    "logging",
+    "mysql",
+    "postgresql",
+    "sqlite",
+    "tracking"
+  ],
+  "homepage": "https://github.com/xantiagoma/drizzle-audit#readme",
+  "bugs": {
+    "url": "https://github.com/xantiagoma/drizzle-audit/issues"
+  },
+  "license": "MIT",
+  "author": "Santiago Montoya <xantiagoma@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xantiagoma/drizzle-audit.git"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./pg": {
+      "import": {
+        "types": "./dist/pg.d.mts",
+        "default": "./dist/pg.mjs"
+      },
+      "require": {
+        "types": "./dist/pg.d.cts",
+        "default": "./dist/pg.cjs"
+      }
+    },
+    "./sqlite": {
+      "import": {
+        "types": "./dist/sqlite.d.mts",
+        "default": "./dist/sqlite.mjs"
+      },
+      "require": {
+        "types": "./dist/sqlite.d.cts",
+        "default": "./dist/sqlite.cjs"
+      }
+    },
+    "./mysql": {
+      "import": {
+        "types": "./dist/mysql.d.mts",
+        "default": "./dist/mysql.mjs"
+      },
+      "require": {
+        "types": "./dist/mysql.d.cts",
+        "default": "./dist/mysql.cjs"
+      }
+    },
+    "./storage/drizzle": {
+      "import": {
+        "types": "./dist/storage/drizzle.d.mts",
+        "default": "./dist/storage/drizzle.mjs"
+      },
+      "require": {
+        "types": "./dist/storage/drizzle.d.cts",
+        "default": "./dist/storage/drizzle.cjs"
+      }
+    },
+    "./storage/console": {
+      "import": {
+        "types": "./dist/storage/console.d.mts",
+        "default": "./dist/storage/console.mjs"
+      },
+      "require": {
+        "types": "./dist/storage/console.d.cts",
+        "default": "./dist/storage/console.cjs"
+      }
+    },
+    "./storage/callback": {
+      "import": {
+        "types": "./dist/storage/callback.d.mts",
+        "default": "./dist/storage/callback.mjs"
+      },
+      "require": {
+        "types": "./dist/storage/callback.d.cts",
+        "default": "./dist/storage/callback.cjs"
+      }
+    },
+    "./storage/multi": {
+      "import": {
+        "types": "./dist/storage/multi.d.mts",
+        "default": "./dist/storage/multi.mjs"
+      },
+      "require": {
+        "types": "./dist/storage/multi.d.cts",
+        "default": "./dist/storage/multi.cjs"
+      }
+    },
+    "./storage/http": {
+      "import": {
+        "types": "./dist/storage/http.d.mts",
+        "default": "./dist/storage/http.mjs"
+      },
+      "require": {
+        "types": "./dist/storage/http.d.cts",
+        "default": "./dist/storage/http.cjs"
+      }
+    },
+    "./transforms": {
+      "import": {
+        "types": "./dist/transforms.d.mts",
+        "default": "./dist/transforms.mjs"
+      },
+      "require": {
+        "types": "./dist/transforms.d.cts",
+        "default": "./dist/transforms.cjs"
+      }
+    },
+    "./middleware/hono": {
+      "import": {
+        "types": "./dist/middleware/hono.d.mts",
+        "default": "./dist/middleware/hono.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/hono.d.cts",
+        "default": "./dist/middleware/hono.cjs"
+      }
+    },
+    "./middleware/elysia": {
+      "import": {
+        "types": "./dist/middleware/elysia.d.mts",
+        "default": "./dist/middleware/elysia.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/elysia.d.cts",
+        "default": "./dist/middleware/elysia.cjs"
+      }
+    },
+    "./middleware/fetch": {
+      "import": {
+        "types": "./dist/middleware/fetch.d.mts",
+        "default": "./dist/middleware/fetch.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/fetch.d.cts",
+        "default": "./dist/middleware/fetch.cjs"
+      }
+    },
+    "./middleware/node": {
+      "import": {
+        "types": "./dist/middleware/node.d.mts",
+        "default": "./dist/middleware/node.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/node.d.cts",
+        "default": "./dist/middleware/node.cjs"
+      }
+    },
+    "./middleware/trpc": {
+      "import": {
+        "types": "./dist/middleware/trpc.d.mts",
+        "default": "./dist/middleware/trpc.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/trpc.d.cts",
+        "default": "./dist/middleware/trpc.cjs"
+      }
+    },
+    "./middleware/orpc": {
+      "import": {
+        "types": "./dist/middleware/orpc.d.mts",
+        "default": "./dist/middleware/orpc.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/orpc.d.cts",
+        "default": "./dist/middleware/orpc.cjs"
+      }
+    },
+    "./middleware/graphql": {
+      "import": {
+        "types": "./dist/middleware/graphql.d.mts",
+        "default": "./dist/middleware/graphql.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/graphql.d.cts",
+        "default": "./dist/middleware/graphql.cjs"
+      }
+    },
+    "./middleware/worker": {
+      "import": {
+        "types": "./dist/middleware/worker.d.mts",
+        "default": "./dist/middleware/worker.mjs"
+      },
+      "require": {
+        "types": "./dist/middleware/worker.d.cts",
+        "default": "./dist/middleware/worker.cjs"
+      }
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "test": "vp test run",
+    "test:coverage": "vp test run --coverage",
+    "test:coverage:open": "vp test run --coverage && open coverage/index.html",
+    "lint": "vp lint",
+    "lint:fix": "vp lint --fix",
+    "format": "vp fmt",
+    "format:check": "vp fmt --check",
+    "check": "vp lint && vp fmt --check && tsc --noEmit",
+    "release": "changelogen --release && bun run build && npm publish",
+    "changelog": "changelogen",
+    "example:basic": "bun examples/basic/server.ts",
+    "example:mongo": "bun examples/mongo/server.ts",
+    "example:express": "bun examples/express-mysql-sqlite/server.ts"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@electric-sql/pglite": "^0.4.5",
+    "@types/express": "^5.0.6",
+    "@vitest/coverage-v8": "4.1.6",
+    "changelogen": "^0.6.2",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "^1.4.28",
+    "express": "^5.2.1",
+    "get-port-please": "^3.2.0",
+    "hono": "^4.12.22",
+    "mongodb": "^7.2.0",
+    "mongodb-memory-server": "^11.1.0",
+    "mysql-memory-server": "^1.14.1",
+    "mysql2": "^3.22.3",
+    "vite-plus": "^0.1.22"
   },
   "peerDependencies": {
+    "drizzle-orm": ">= 0.33.0 < 2",
     "typescript": "^5"
   }
 }
