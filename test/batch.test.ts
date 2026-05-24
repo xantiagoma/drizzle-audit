@@ -26,7 +26,7 @@ async function createTestDb() {
   `);
   await db.execute(sql`
     CREATE TABLE audit_log (
-      id BIGSERIAL PRIMARY KEY, table_name TEXT, action VARCHAR(50) NOT NULL,
+      id TEXT PRIMARY KEY, table_name TEXT, action VARCHAR(50) NOT NULL,
       row_id TEXT, changes JSONB, old_data JSONB, new_data JSONB,
       user_id TEXT, metadata JSONB, timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )

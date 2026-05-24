@@ -36,16 +36,16 @@ describe("pgAuditTable", () => {
     }
   });
 
-  test("default id is uuid", () => {
+  test("default id is text (uuidv7)", () => {
     const table = pgAuditTable();
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toBe("PgUUID");
+    expect((columns as any).id.columnType).toBe("PgText");
   });
 
   test("serial id mode", () => {
     const table = pgAuditTable("audit_log", { idMode: "serial" });
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toBe("PgBigSerial53");
+    expect((columns as any).id.columnType).toBe("PgBigSerial53");
   });
 
   test("action column is not null", () => {
@@ -95,13 +95,13 @@ describe("sqliteAuditTable", () => {
   test("default id is text (uuid)", () => {
     const table = sqliteAuditTable();
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toBe("SQLiteText");
+    expect((columns as any).id.columnType).toBe("SQLiteText");
   });
 
   test("integer id mode", () => {
-    const table = sqliteAuditTable("audit_log", { idMode: "integer" });
+    const table = sqliteAuditTable("audit_log", { idMode: "serial" });
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toBe("SQLiteInteger");
+    expect((columns as any).id.columnType).toBe("SQLiteInteger");
   });
 
   test("json columns use text mode json", () => {
@@ -153,13 +153,13 @@ describe("mysqlAuditTable", () => {
   test("default id is varchar (uuid)", () => {
     const table = mysqlAuditTable();
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toBe("MySqlVarChar");
+    expect((columns as any).id.columnType).toBe("MySqlVarChar");
   });
 
   test("serial id mode", () => {
     const table = mysqlAuditTable("audit_log", { idMode: "serial" });
     const columns = getTableColumns(table);
-    expect((columns.id as any).columnType).toContain("MySqlBigInt");
+    expect((columns as any).id.columnType).toContain("MySqlBigInt");
   });
 
   test("json columns use native json type", () => {
@@ -212,7 +212,7 @@ describe("sqliteAuditTable - defaultFn closures", () => {
   test("uuid id defaultFn generates valid UUID", () => {
     const table = sqliteAuditTable();
     const columns = getTableColumns(table);
-    const idCol = columns.id as any;
+    const idCol = (columns as any).id;
     // The $defaultFn should exist and return a UUID
     expect(idCol.defaultFn).toBeDefined();
     const generated = idCol.defaultFn();
@@ -229,9 +229,9 @@ describe("sqliteAuditTable - defaultFn closures", () => {
   });
 
   test("integer id mode does not use defaultFn", () => {
-    const table = sqliteAuditTable("audit_log", { idMode: "integer" });
+    const table = sqliteAuditTable("audit_log", { idMode: "serial" });
     const columns = getTableColumns(table);
-    const idCol = columns.id as any;
+    const idCol = (columns as any).id;
     expect(idCol.defaultFn).toBeUndefined();
   });
 
@@ -251,7 +251,7 @@ describe("mysqlAuditTable - defaultFn closures", () => {
   test("uuid id defaultFn generates valid UUID", () => {
     const table = mysqlAuditTable();
     const columns = getTableColumns(table);
-    const idCol = columns.id as any;
+    const idCol = (columns as any).id;
     expect(idCol.defaultFn).toBeDefined();
     const generated = idCol.defaultFn();
     expect(generated).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/);
@@ -260,7 +260,7 @@ describe("mysqlAuditTable - defaultFn closures", () => {
   test("serial id mode does not use defaultFn", () => {
     const table = mysqlAuditTable("audit_log", { idMode: "serial" });
     const columns = getTableColumns(table);
-    const idCol = columns.id as any;
+    const idCol = (columns as any).id;
     expect(idCol.defaultFn).toBeUndefined();
   });
 
@@ -273,6 +273,72 @@ describe("mysqlAuditTable - defaultFn closures", () => {
     });
     const columns = getTableColumns(table);
     expect((columns as any).env).toBeDefined();
+  });
+});
+
+describe("pgAuditTable - extraIndexes", () => {
+  test("adds extra indexes alongside defaults", () => {
+    const { index } = require("drizzle-orm/pg-core");
+    const { text } = require("drizzle-orm/pg-core");
+    const table = pgAuditTable("audit_log", {
+      extraColumns: () => ({
+        tenantId: text("tenant_id"),
+      }),
+      extraIndexes: (t: any) => [index("audit_tenant_idx").on(t.tenantId)],
+    });
+    // Table should be created without error
+    expect(getTableName(table)).toBe("audit_log");
+    expect((getTableColumns(table) as any).tenantId).toBeDefined();
+  });
+});
+
+describe("sqliteAuditTable - extraIndexes", () => {
+  test("adds extra indexes alongside defaults", () => {
+    const { index } = require("drizzle-orm/sqlite-core");
+    const { text } = require("drizzle-orm/sqlite-core");
+    const table = sqliteAuditTable("audit_log", {
+      extraColumns: () => ({
+        region: text("region"),
+      }),
+      extraIndexes: (t: any) => [index("audit_region_idx").on(t.region)],
+    });
+    expect(getTableName(table)).toBe("audit_log");
+    expect((getTableColumns(table) as any).region).toBeDefined();
+  });
+});
+
+describe("mysqlAuditTable - extraIndexes", () => {
+  test("adds extra indexes alongside defaults", () => {
+    const { index, varchar } = require("drizzle-orm/mysql-core");
+    const table = mysqlAuditTable("audit_log", {
+      extraColumns: () => ({
+        env: varchar("env", { length: 20 }),
+      }),
+      extraIndexes: (t: any) => [index("audit_env_idx").on(t.env)],
+    });
+    expect(getTableName(table)).toBe("audit_log");
+    expect((getTableColumns(table) as any).env).toBeDefined();
+  });
+});
+
+describe("pgAuditTable - idMode uuidv4", () => {
+  test("uuidv4 uses uuid column with defaultRandom", () => {
+    const table = pgAuditTable("audit_log", { idMode: "uuidv4" });
+    const columns = getTableColumns(table);
+    expect((columns as any).id.columnType).toBe("PgUUID");
+  });
+});
+
+describe("pgAuditTable - idMode custom", () => {
+  test("custom generator uses text column", () => {
+    let counter = 0;
+    const table = pgAuditTable("audit_log", {
+      idMode: { generate: () => `custom_${++counter}` },
+    });
+    const columns = getTableColumns(table);
+    expect((columns as any).id.columnType).toBe("PgText");
+    expect((columns as any).id.defaultFn).toBeDefined();
+    expect((columns as any).id.defaultFn()).toBe("custom_1");
   });
 });
 

@@ -168,8 +168,11 @@ import { pgAuditTable } from "drizzle-audit/pg";
 import { sqliteAuditTable } from "drizzle-audit/sqlite";
 import { mysqlAuditTable } from "drizzle-audit/mysql";
 
-// Default: table "audit_log", UUID primary key
+// Default: table "audit_log", UUID v7 (time-sortable)
 const auditLog = pgAuditTable();
+
+// UUID v4 (random)
+const auditLog = pgAuditTable("audit_log", { idMode: "uuidv4" });
 
 // Custom name
 const auditLog = pgAuditTable("app_audit");
@@ -180,6 +183,21 @@ const auditLog = pgAuditTable("audit_log", {
   extraColumns: () => ({
     tenantId: varchar("tenant_id", { length: 64 }),
   }),
+});
+
+// Custom ID generator (nanoid, ulid, typeid, etc.)
+import { nanoid } from "nanoid";
+const auditLog = pgAuditTable("audit_log", {
+  idMode: { generate: () => nanoid() },
+});
+
+// Extra indexes
+import { index } from "drizzle-orm/pg-core";
+const auditLog = pgAuditTable("audit_log", {
+  extraColumns: () => ({
+    tenantId: text("tenant_id").notNull(),
+  }),
+  extraIndexes: (table) => [index("audit_tenant_action_idx").on(table.tenantId, table.action)],
 });
 ```
 
@@ -776,11 +794,11 @@ Same functionality accessible from the wrapped db instance — convenient when d
 
 ### Schema
 
-| Export                              | Description                           |
-| ----------------------------------- | ------------------------------------- |
-| `pgAuditTable(name?, options?)`     | PostgreSQL audit table (UUID default) |
-| `sqliteAuditTable(name?, options?)` | SQLite audit table                    |
-| `mysqlAuditTable(name?, options?)`  | MySQL audit table                     |
+| Export                              | Description                              |
+| ----------------------------------- | ---------------------------------------- |
+| `pgAuditTable(name?, options?)`     | PostgreSQL audit table (UUID v7 default) |
+| `sqliteAuditTable(name?, options?)` | SQLite audit table                       |
+| `mysqlAuditTable(name?, options?)`  | MySQL audit table                        |
 
 ### Transforms (`drizzle-audit/transforms`)
 

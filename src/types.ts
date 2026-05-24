@@ -490,4 +490,18 @@ export interface DrizzleAuditOptions {
    * ```
    */
   onEntry?: (entry: AuditEntry) => void | Promise<void>;
+  /**
+   * How audit entry IDs are generated at runtime.
+   * Must match the `idMode` used in the audit table schema.
+   * Default: `"uuidv7"`.
+   *
+   * @example
+   * ```ts
+   * idMode: "uuidv7"  // default, time-sortable
+   * idMode: "uuidv4"  // random UUID
+   * idMode: "serial"  // DB auto-increment (no client-side ID)
+   * idMode: { generate: () => nanoid() }
+   * ```
+   */
+  idMode?: import("./id.ts").IdMode;
 }

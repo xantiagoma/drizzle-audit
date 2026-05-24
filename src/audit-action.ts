@@ -1,4 +1,5 @@
 import { resolveContext } from "./context.ts";
+import { generateAuditId } from "./id.ts";
 import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
 import type { AuditEntry, AuditStorage } from "./types.ts";
 
@@ -96,7 +97,7 @@ export function drizzleAuditAction(
   const ctx = resolveContext(options.userId !== undefined ? { userId: options.userId } : undefined);
 
   const entry: AuditEntry = {
-    id: crypto.randomUUID(),
+    id: generateAuditId(),
     tableName: options.tableName ?? null,
     action: options.action,
     rowId: options.rowId ?? null,

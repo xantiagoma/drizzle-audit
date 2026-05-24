@@ -12,6 +12,7 @@ export {
   addDrizzleAuditMetadata,
 } from "./context.ts";
 export { computeDiff, buildChanges } from "./diff.ts";
+export type { IdMode, IdPreset } from "./id.ts";
 export { sampleRate, sampleWithOverride, alwaysAudit, neverAudit } from "./sampling.ts";
 export type { DiffEntry, ComputeDiffOptions } from "./diff.ts";
 export type {

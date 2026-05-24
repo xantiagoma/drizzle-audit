@@ -8,19 +8,8 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
-
-/**
- * Controls the type of primary key used for a PostgreSQL audit table.
- *
- * - `"uuid"` — A `uuid` column with `defaultRandom()`. Default.
- * - `"serial"` — A `bigserial` auto-incrementing integer column.
- *
- * @example
- * ```ts
- * const auditLog = pgAuditTable("audit_log", { idMode: "serial" });
- * ```
- */
-export type AuditIdMode = "uuid" | "serial";
+import type { IdMode } from "../id.ts";
+import { getIdGenerator } from "../id.ts";
 
 /**
  * Options for {@link pgAuditTable}.
@@ -28,7 +17,7 @@ export type AuditIdMode = "uuid" | "serial";
  * @example
  * ```ts
  * const auditLog = pgAuditTable("audit_log", {
- *   idMode: "uuid",
+ *   idMode: "uuidv7",
  *   extraColumns: () => ({
  *     tenantId: text("tenant_id").notNull(),
  *   }),
@@ -37,34 +26,58 @@ export type AuditIdMode = "uuid" | "serial";
  */
 export interface PgAuditTableOptions {
   /**
-   * The type of primary key to use for the audit table.
-   * Defaults to `"uuid"`.
+   * How the primary key ID is generated.
+   *
+   * - `"uuidv7"` (default) — UUID v7 column with time-sortable `$defaultFn`.
+   * - `"uuidv4"` — UUID column with PG-native `defaultRandom()`.
+   * - `"serial"` — `bigserial` auto-incrementing integer.
+   * - `{ generate: () => string }` — Custom generator (nanoid, ulid, typeid, etc.)
+   *   stored in a `text` column.
+   *
+   * @example
+   * ```ts
+   * idMode: "uuidv7"  // default
+   * idMode: "serial"
+   * idMode: { generate: () => nanoid() }
+   * ```
    */
-  idMode?: AuditIdMode;
+  idMode?: IdMode;
   /**
-   * A factory function that returns additional Drizzle column definitions to
-   * include in the audit table. Useful for adding tenant IDs, environment
-   * tags, or any other application-specific columns.
+   * A factory function that returns additional Drizzle column definitions.
    *
    * @example
    * ```ts
    * extraColumns: () => ({
    *   tenantId: text("tenant_id").notNull(),
-   *   env: varchar("env", { length: 20 }),
    * })
    * ```
    */
   extraColumns?: () => Record<string, any>;
+  /**
+   * A function that returns additional Drizzle index definitions.
+   * Receives the table reference so you can reference any column (including extra ones).
+   *
+   * @example
+   * ```ts
+   * import { index } from "drizzle-orm/pg-core"
+   *
+   * pgAuditTable("audit_log", {
+   *   extraColumns: () => ({
+   *     tenantId: text("tenant_id").notNull(),
+   *   }),
+   *   extraIndexes: (table) => [
+   *     index("audit_tenant_action_idx").on(table.tenantId, table.action),
+   *     index("audit_tenant_ts_idx").on(table.tenantId, table.timestamp),
+   *   ],
+   * })
+   * ```
+   */
+  extraIndexes?: (table: any) => any[];
 }
 
 /**
  * Creates a Drizzle ORM table definition for storing audit log entries in
  * PostgreSQL.
- *
- * The table includes the standard audit columns (`id`, `table_name`, `action`,
- * `row_id`, `changes`, `old_data`, `new_data`, `user_id`, `metadata`,
- * `timestamp`) with appropriate indexes pre-configured. Pass `options` to
- * customise the primary key type or add extra columns.
  *
  * @param name - The SQL table name. Defaults to `"audit_log"`.
  * @param options - Optional configuration for id mode and extra columns.
@@ -73,30 +86,26 @@ export interface PgAuditTableOptions {
  *
  * @example
  * ```ts
- * // schema.ts — default UUID primary key
- * import { pgAuditTable } from "drizzle-audit/schema/pg";
- *
- * export const auditLog = pgAuditTable("audit_log");
- * ```
- *
- * @example
- * ```ts
- * // schema.ts — serial primary key with a custom tenant column
- * export const auditLog = pgAuditTable("audit_log", {
- *   idMode: "serial",
- *   extraColumns: () => ({
- *     tenantId: text("tenant_id").notNull(),
- *   }),
+ * export const auditLog = pgAuditTable();                              // UUID v7 default
+ * export const auditLog = pgAuditTable("audit", { idMode: "serial" }); // bigserial
+ * export const auditLog = pgAuditTable("audit", {                      // custom
+ *   idMode: { generate: () => nanoid() },
  * });
  * ```
  */
 export function pgAuditTable(name = "audit_log", options?: PgAuditTableOptions) {
-  const idMode = options?.idMode ?? "uuid";
+  const mode = options?.idMode ?? "uuidv7";
 
-  const idColumn =
-    idMode === "serial"
-      ? { id: bigserial("id", { mode: "number" }).primaryKey() }
-      : { id: uuid("id").primaryKey().defaultRandom() };
+  let idColumn: Record<string, any>;
+  if (mode === "serial" || mode === "integer") {
+    idColumn = { id: bigserial("id", { mode: "number" }).primaryKey() };
+  } else if (mode === "uuidv4") {
+    idColumn = { id: uuid("id").primaryKey().defaultRandom() };
+  } else {
+    // uuidv7 or custom — use text column with $defaultFn
+    const generator = getIdGenerator(mode)!;
+    idColumn = { id: text("id").primaryKey().$defaultFn(generator) };
+  }
 
   return pgTable(
     name,
@@ -119,6 +128,7 @@ export function pgAuditTable(name = "audit_log", options?: PgAuditTableOptions) 
       index(`${name}_user_id_idx`).on(table.userId),
       index(`${name}_action_idx`).on(table.action),
       index(`${name}_timestamp_idx`).on(table.timestamp),
+      ...(options?.extraIndexes?.(table) ?? []),
     ],
   );
 }

@@ -67,7 +67,8 @@ tmp/                    — gitignored scratch/reference (not committed)
 - AsyncLocalStorage with `Symbol.for('drizzle-audit:als')` for context
 - Separate ALS `Symbol.for('drizzle-audit:tx-db')` for transaction-scoped storage
 - Delta-based changes by default (`dataMode: 'changes-only'`)
-- UUID default for audit entry IDs (configurable to serial)
+- UUID v7 default for audit entry IDs (configurable: uuidv7, uuidv4, serial, or custom generator)
+- Schema factories support `extraColumns` + `extraIndexes` for full customization
 - `auditTable` option auto-excludes audit table from being audited (prevents recursion)
 - No-op UPDATE detection (skips audit when nothing changed)
 - Automatic interception requires `.returning()` — MySQL needs manual `drizzleAuditAction()`

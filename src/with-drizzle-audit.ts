@@ -8,6 +8,7 @@ import {
 } from "./context.ts";
 import { _setGlobalStorage } from "./audit-action-internal.ts";
 import { _setComputeChanges } from "./diff.ts";
+import { _setIdGenerator } from "./id.ts";
 import { drizzleAuditAction } from "./audit-action.ts";
 import { trackAction } from "./track-action.ts";
 import { _withTxDb } from "./storage/drizzle.ts";
@@ -223,6 +224,7 @@ export function withDrizzleAudit<Q>(db: Q, options: DrizzleAuditOptions): Q & Au
   _setGlobalStorage(options.storage, options.onError);
   _setMetadataMerge(options.metadataMerge);
   _setComputeChanges(options.computeChanges);
+  _setIdGenerator(options.idMode);
   return _wrapDbProxy(db, options) as Q & AuditedDb;
 }
 

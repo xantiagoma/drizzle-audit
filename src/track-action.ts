@@ -1,4 +1,5 @@
 import { resolveContext } from "./context.ts";
+import { generateAuditId } from "./id.ts";
 import type { AuditEntry, AuditStorage, AuditErrorHandler } from "./types.ts";
 import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
 
@@ -127,7 +128,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
   // Write START entry immediately (fire-and-forget)
   if (targetStorage) {
     const startEntry: AuditEntry = {
-      id: crypto.randomUUID(),
+      id: generateAuditId(),
       tableName: options.tableName ?? null,
       action: options.action,
       rowId: options.rowId ?? null,
@@ -155,7 +156,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
     );
 
     return {
-      id: crypto.randomUUID(),
+      id: generateAuditId(),
       tableName: options.tableName ?? null,
       action: options.action,
       rowId: options.rowId ?? null,

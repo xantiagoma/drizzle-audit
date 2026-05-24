@@ -49,7 +49,7 @@ async function createTestDb() {
 
   await db.execute(sql`
     CREATE TABLE audit_log (
-      id BIGSERIAL PRIMARY KEY,
+      id TEXT PRIMARY KEY,
       table_name TEXT,
       action VARCHAR(50) NOT NULL,
       row_id TEXT,

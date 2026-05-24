@@ -240,7 +240,8 @@
     "example:express": "bun examples/express-mysql-sqlite/server.ts"
   },
   "dependencies": {
-    "defu": "^6.1.7"
+    "defu": "^6.1.7",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.4.5",

@@ -5,6 +5,7 @@ const getColumnsFromTable: (table: Table) => Record<string, any> =
   (drizzleOrm as any).getColumns ?? (drizzleOrm as any).getTableColumns;
 import { resolveContext } from "./context.ts";
 import { buildChanges } from "./diff.ts";
+import { generateAuditId } from "./id.ts";
 import type {
   AuditEntry,
   AuditStorage,
@@ -16,9 +17,7 @@ import type {
   ShouldAuditContext,
 } from "./types.ts";
 
-function generateId(): string {
-  return crypto.randomUUID();
-}
+const generateId = generateAuditId;
 
 export function getPrimaryKeyColumns(table: Table): string[] {
   const columns = getColumnsFromTable(table);
