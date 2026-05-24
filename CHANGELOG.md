@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.11
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.10...v0.1.11)
+
+### 🚀 Enhancements
+
+- SetDrizzleAuditContext, configurable IDs, context propagation docs ([6f75dca](https://github.com/xantiagoma/drizzle-audit/commit/6f75dca))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.10
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.9...v0.1.10)
