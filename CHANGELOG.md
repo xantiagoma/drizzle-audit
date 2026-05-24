@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.10
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.9...v0.1.10)
+
+### 🚀 Enhancements
+
+- Configurable ID system (uuidv7 default) + extraIndexes ([0fd096c](https://github.com/xantiagoma/drizzle-audit/commit/0fd096c))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.9
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.8...v0.1.9)
