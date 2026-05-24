@@ -4,6 +4,7 @@ import {
   newDrizzleAuditContext,
   useDrizzleAuditContext,
   getDrizzleAuditContext,
+  setDrizzleAuditContext,
   addDrizzleAuditMetadata,
   resolveContext,
 } from "../src/context.ts";
@@ -160,6 +161,21 @@ describe("newDrizzleAuditContext", () => {
   test("works without existing context", async () => {
     await newDrizzleAuditContext({ userId: "fresh" }, async () => {
       expect(useDrizzleAuditContext()!.userId).toBe("fresh");
+    });
+  });
+});
+
+describe("setDrizzleAuditContext", () => {
+  test("sets context for current async scope", async () => {
+    // Run in an isolated async scope so enterWith doesn't leak
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setDrizzleAuditContext({ userId: "imperative_user", metadata: { source: "test" } });
+        const ctx = useDrizzleAuditContext();
+        expect(ctx?.userId).toBe("imperative_user");
+        expect((ctx?.metadata as any)?.source).toBe("test");
+        resolve();
+      }, 0);
     });
   });
 });

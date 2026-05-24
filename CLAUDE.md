@@ -75,6 +75,8 @@ tmp/                    — gitignored scratch/reference (not committed)
 - `drizzle-orm >= 0.33.0 < 2` as peer dependency
 - `withDrizzleAuditContext` MERGES with existing context, `newDrizzleAuditContext` REPLACES
 - `db.$audit` namespace exposes all audit functionality from the db instance
+- ALS propagation: `run()` (safe) for Hono/Express/Koa/tRPC/oRPC/Fetch/Worker; `enterWith` (fragile) for Elysia/Yoga/GraphQL
+- `setDrizzleAuditContext` / `db.$audit.setContext` for imperative context setting (escape hatch for embedded frameworks)
 - All examples use `get-port-please` for automatic port selection
 
 ## IMPORTANT: Before Every Commit / Release

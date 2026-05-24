@@ -321,12 +321,29 @@ const db = withDrizzleAudit(rawDb, {
 });
 ```
 
+### `setContext` — imperative (no callback)
+
+For GraphQL context factories, middleware that can't wrap `next()`, or anywhere you need to set context without a callback:
+
+```ts
+// In a GraphQL Yoga context factory
+context: async ({ request }) => {
+  const session = await getSession(request);
+  db.$audit.setContext({
+    userId: session?.user?.id ?? null,
+    metadata: { service: "graphql" },
+  });
+  return { session };
+};
+```
+
 ### Standalone imports
 
 ```ts
 import {
-  withDrizzleAuditContext, // merges
-  newDrizzleAuditContext, // replaces
+  withDrizzleAuditContext, // merges (callback)
+  newDrizzleAuditContext, // replaces (callback)
+  setDrizzleAuditContext, // imperative (no callback)
   addDrizzleAuditMetadata,
 } from "drizzle-audit";
 ```
@@ -359,8 +376,14 @@ app.use(
     }),
   }),
 );
-// Also exposes `auditContext` on Elysia handler context
+// Exposes `auditContext` on Elysia handler context
+// ALS context set via enterWith in derive
 ```
+
+> **Note:** When embedding another async framework inside Elysia (e.g. GraphQL Yoga),
+> the ALS context may not propagate across the framework boundary. In that case, use
+> `setDrizzleAuditContext()` or `db.$audit.setContext()` inside the embedded framework's
+> context factory. See [Context Propagation](#context-propagation) below.
 
 ### Express / Fastify / NestJS (Node HTTP)
 
@@ -425,7 +448,7 @@ const auditMiddleware = drizzleAuditORPCMiddleware((_input, context) => ({
 }));
 ```
 
-### GraphQL (Yoga, Apollo)
+### GraphQL (Yoga, Apollo, Pothos)
 
 ```ts
 import {
@@ -433,7 +456,7 @@ import {
   drizzleAuditYogaPlugin,
 } from "drizzle-audit/middleware/graphql";
 
-// Yoga — as plugin
+// Yoga as top-level server — plugin works directly
 const yoga = createYoga({
   plugins: [
     drizzleAuditYogaPlugin((req) => ({
@@ -447,6 +470,26 @@ context: drizzleAuditGraphQLContext(
   ({ req }) => ({ userId: req.headers["x-user-id"] ?? null }),
   (serverCtx, auditCtx) => ({ ...serverCtx, audit: auditCtx }),
 );
+```
+
+> **Yoga embedded in Elysia/Express/Hono?** Use `setDrizzleAuditContext()` in the
+> `context` factory instead of `drizzleAuditYogaPlugin`. See [Context Propagation](#context-propagation).
+
+```ts
+// Recommended for embedded Yoga (inside Elysia, Express, etc.)
+import { setDrizzleAuditContext } from "drizzle-audit";
+
+const yoga = createYoga({
+  schema, // Pothos or any schema
+  context: async ({ request }) => {
+    const session = await getSession(request);
+    setDrizzleAuditContext({
+      userId: session?.user?.id ?? null,
+      metadata: { service: "graphql" },
+    });
+    return { session };
+  },
+});
 ```
 
 ## Background Jobs & Workers
@@ -593,6 +636,47 @@ const db = withDrizzleAudit(rawDb, {
 **Resolution order:** per-table `shouldAudit` → per-table `sample` → global `shouldAudit` → always audit.
 
 The `shouldAudit` function is called **before** diff/transforms — skipping avoids all overhead.
+
+## Context Propagation
+
+drizzle-audit uses Node.js `AsyncLocalStorage` to propagate audit context through async call stacks. There are two approaches, each with different guarantees:
+
+### `run()` — wraps downstream execution (always safe)
+
+Middleware that calls `auditStorage.run(ctx, next)` wraps the entire downstream execution. Context is guaranteed to propagate to all nested async operations.
+
+**These middleware use `run()` and are always safe:**
+Hono, Express, Fastify, NestJS, Koa, tRPC, oRPC, Fetch, Workers
+
+### `enterWith()` — sets context imperatively (fragile across boundaries)
+
+Some frameworks (Elysia, GraphQL Yoga) don't provide a `next()` callback to wrap. These middleware use `enterWith()`, which sets context for the current async scope but may not propagate when:
+
+- A framework is embedded inside another (e.g. Yoga inside Elysia)
+- The framework creates internal async boundaries
+
+**These middleware use `enterWith()` and have caveats:**
+Elysia (`derive`), GraphQL Yoga (`onRequest`), GraphQL context factory
+
+### When context doesn't propagate
+
+If you find that `userId` is `null` in audit entries despite setting context, use `setDrizzleAuditContext()` or `db.$audit.setContext()` at the point closest to where your DB operations run:
+
+```ts
+// Example: Yoga embedded inside Elysia
+const yoga = createYoga({
+  context: async ({ request }) => {
+    const session = await getSession(request);
+    // Set context HERE — guaranteed to propagate to resolvers
+    setDrizzleAuditContext({
+      userId: session?.user?.id ?? null,
+    });
+    return { session };
+  },
+});
+```
+
+This uses `enterWith()` under the hood, but from the RIGHT async scope — the one that shares context with your resolvers/handlers.
 
 ## Customization
 
@@ -778,19 +862,21 @@ Same functionality accessible from the wrapped db instance — convenient when d
 | `db.$audit.withContext(ctx, fn)` | Merge context and run function             |
 | `db.$audit.newContext(ctx, fn)`  | Replace context entirely and run function  |
 | `db.$audit.context()`            | Get current context (`null` if none)       |
+| `db.$audit.setContext(ctx)`      | Set context imperatively (no callback)     |
 | `db.$audit.addMetadata(data)`    | Merge metadata into current context        |
 | `db.$audit.flush()`              | Flush buffered entries (batch mode)        |
 | `db.$audit.pending`              | Number of buffered entries                 |
 
 ### Context (standalone imports — useful when db is not in scope)
 
-| Export                             | Description                                  |
-| ---------------------------------- | -------------------------------------------- |
-| `withDrizzleAuditContext(ctx, fn)` | Merge with existing context and run function |
-| `newDrizzleAuditContext(ctx, fn)`  | Replace context entirely and run function    |
-| `useDrizzleAuditContext()`         | Get current context (`null` if none)         |
-| `getDrizzleAuditContext()`         | Get current context (throws if none)         |
-| `addDrizzleAuditMetadata(data)`    | Merge metadata into current context          |
+| Export                             | Description                                       |
+| ---------------------------------- | ------------------------------------------------- |
+| `withDrizzleAuditContext(ctx, fn)` | Merge with existing context and run function      |
+| `newDrizzleAuditContext(ctx, fn)`  | Replace context entirely and run function         |
+| `useDrizzleAuditContext()`         | Get current context (`null` if none)              |
+| `getDrizzleAuditContext()`         | Get current context (throws if none)              |
+| `setDrizzleAuditContext(ctx)`      | Set context imperatively (no callback, enterWith) |
+| `addDrizzleAuditMetadata(data)`    | Merge metadata into current context               |
 
 ### Schema
 
@@ -821,20 +907,22 @@ Same functionality accessible from the wrapped db instance — convenient when d
 
 ### Middleware
 
-| Export                        | From                               | For                               |
-| ----------------------------- | ---------------------------------- | --------------------------------- |
-| `drizzleAuditFetch`           | `drizzle-audit/middleware/fetch`   | Bun.serve, CF Workers, Deno.serve |
-| `drizzleAuditFetchMiddleware` | `drizzle-audit/middleware/fetch`   | Generic `(req, next)` pattern     |
-| `drizzleAuditMiddleware`      | `drizzle-audit/middleware/hono`    | Hono                              |
-| `drizzleAuditPlugin`          | `drizzle-audit/middleware/elysia`  | Elysia                            |
-| `drizzleAuditNodeMiddleware`  | `drizzle-audit/middleware/node`    | Express, Fastify, NestJS          |
-| `drizzleAuditKoaMiddleware`   | `drizzle-audit/middleware/node`    | Koa                               |
-| `drizzleAuditTRPCMiddleware`  | `drizzle-audit/middleware/trpc`    | tRPC                              |
-| `drizzleAuditORPCMiddleware`  | `drizzle-audit/middleware/orpc`    | oRPC                              |
-| `drizzleAuditGraphQLContext`  | `drizzle-audit/middleware/graphql` | Apollo, Yoga (context)            |
-| `drizzleAuditYogaPlugin`      | `drizzle-audit/middleware/graphql` | GraphQL Yoga (plugin)             |
-| `drizzleAuditHandler`         | `drizzle-audit/middleware/worker`  | BullMQ, Temporal, Inngest         |
-| `drizzleAuditWrap`            | `drizzle-audit/middleware/worker`  | Static context for cron/scripts   |
+| Export                        | From                               | For                               | ALS           |
+| ----------------------------- | ---------------------------------- | --------------------------------- | ------------- |
+| `drizzleAuditFetch`           | `drizzle-audit/middleware/fetch`   | Bun.serve, CF Workers, Deno.serve | `run()`       |
+| `drizzleAuditFetchMiddleware` | `drizzle-audit/middleware/fetch`   | Generic `(req, next)` pattern     | `run()`       |
+| `drizzleAuditMiddleware`      | `drizzle-audit/middleware/hono`    | Hono                              | `run()`       |
+| `drizzleAuditPlugin`          | `drizzle-audit/middleware/elysia`  | Elysia                            | `enterWith` ¹ |
+| `drizzleAuditNodeMiddleware`  | `drizzle-audit/middleware/node`    | Express, Fastify, NestJS          | `run()`       |
+| `drizzleAuditKoaMiddleware`   | `drizzle-audit/middleware/node`    | Koa                               | `run()`       |
+| `drizzleAuditTRPCMiddleware`  | `drizzle-audit/middleware/trpc`    | tRPC                              | `run()`       |
+| `drizzleAuditORPCMiddleware`  | `drizzle-audit/middleware/orpc`    | oRPC                              | `run()`       |
+| `drizzleAuditGraphQLContext`  | `drizzle-audit/middleware/graphql` | Apollo, Yoga (context)            | `enterWith` ¹ |
+| `drizzleAuditYogaPlugin`      | `drizzle-audit/middleware/graphql` | GraphQL Yoga (plugin)             | `enterWith` ¹ |
+| `drizzleAuditHandler`         | `drizzle-audit/middleware/worker`  | BullMQ, Temporal, Inngest         | `run()`       |
+| `drizzleAuditWrap`            | `drizzle-audit/middleware/worker`  | Static context for cron/scripts   | `run()`       |
+
+¹ Uses `enterWith` — see [Context Propagation](#context-propagation) for caveats with embedded frameworks.
 
 ### Utilities
 

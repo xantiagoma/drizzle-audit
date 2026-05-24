@@ -1,6 +1,7 @@
 import { getTableName, type Table } from "drizzle-orm";
 import {
   useDrizzleAuditContext,
+  setDrizzleAuditContext,
   withDrizzleAuditContext,
   newDrizzleAuditContext,
   addDrizzleAuditMetadata,
@@ -162,6 +163,20 @@ export interface AuditNamespace {
   newContext<T>(context: DrizzleAuditContext, fn: () => Promise<T>): Promise<T>;
   /** Get the current audit context, or `null` if none is active. */
   context(): DrizzleAuditContext | null;
+  /**
+   * Set the audit context for the current async scope (imperative, no callback).
+   * Useful in GraphQL context factories or middleware that can't wrap `next()`.
+   *
+   * @example
+   * ```ts
+   * // In a GraphQL Yoga context factory
+   * context: async ({ request }) => {
+   *   db.$audit.setContext({ userId: session?.user?.id ?? null });
+   *   return { session };
+   * }
+   * ```
+   */
+  setContext(context: DrizzleAuditContext): void;
   /** Merge metadata into the current audit context (deep merge). */
   addMetadata(metadata: Record<string, unknown>): void;
   /**
@@ -261,6 +276,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
     withContext: withDrizzleAuditContext,
     newContext: newDrizzleAuditContext,
     context: useDrizzleAuditContext,
+    setContext: setDrizzleAuditContext,
     addMetadata: addDrizzleAuditMetadata,
     setOnEntry: (fn) => {
       onEntry = fn;

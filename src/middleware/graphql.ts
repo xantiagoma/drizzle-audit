@@ -58,12 +58,24 @@ export function drizzleAuditGraphQLContext<TServerContext = any, TResult = any>(
 
 /**
  * GraphQL Yoga plugin for drizzle-audit.
- * Uses the plugin lifecycle for proper AsyncLocalStorage scoping.
+ *
+ * **Works best when Yoga is the top-level server.** When Yoga is embedded inside
+ * another framework (e.g. Elysia, Express), the `onRequest` hook may not share
+ * the same async context as resolvers. In that case, use `setDrizzleAuditContext()`
+ * or `db.$audit.setContext()` inside Yoga's `context` factory instead:
  *
  * ```ts
- * import { createYoga } from 'graphql-yoga'
- * import { drizzleAuditYogaPlugin } from 'drizzle-audit/middleware/graphql'
+ * // Recommended for embedded Yoga:
+ * const yoga = createYoga({
+ *   context: async ({ request }) => {
+ *     setDrizzleAuditContext({ userId: ... });
+ *     return { ... };
+ *   },
+ * })
+ * ```
  *
+ * ```ts
+ * // Works when Yoga is the top-level server:
  * const yoga = createYoga({
  *   plugins: [
  *     drizzleAuditYogaPlugin((request) => ({

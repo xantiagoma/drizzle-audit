@@ -11,11 +11,15 @@ export interface ElysiaAuditPluginOptions {
 /**
  * Creates an Elysia-compatible plugin for drizzle-audit context.
  *
- * Uses `derive` pattern to establish audit context for each request.
- * The context is set via AsyncLocalStorage and available to all
- * downstream handlers and audit operations.
+ * Resolves audit context in `derive` and exposes it as `ctx.auditContext`.
+ * Sets AsyncLocalStorage context via `enterWith` in `onBeforeHandle` so it's
+ * available in handlers and downstream code (including embedded frameworks).
  *
- * Usage:
+ * For embedded async frameworks (e.g. GraphQL Yoga inside Elysia), the ALS
+ * context may not propagate. In those cases, use `setDrizzleAuditContext()`
+ * or `db.$audit.setContext()` inside the embedded framework's context factory.
+ *
+ * @example
  * ```ts
  * import Elysia from 'elysia'
  * import { drizzleAuditPlugin } from 'drizzle-audit/middleware/elysia'
@@ -26,14 +30,19 @@ export interface ElysiaAuditPluginOptions {
  *       userId: headers['x-user-id'] ?? null,
  *     }),
  *   }))
+ *   .get('/api/users', ({ auditContext }) => {
+ *     // auditContext is available on the Elysia context
+ *     // ALS context is also set for db operations
+ *   })
  * ```
  */
 export function drizzleAuditPlugin(options: ElysiaAuditPluginOptions) {
   return (app: any) =>
-    app.derive(async ({ request }: { request: Request }) => {
+    app.derive({ as: "global" }, async ({ request }: { request: Request }) => {
       const headers = Object.fromEntries(request.headers);
-      const ctx = await options.getContext({ request, headers });
-      auditStorage.enterWith(ctx);
-      return { auditContext: ctx };
+      const auditContext = await options.getContext({ request, headers });
+      // Set ALS context here — derive runs in the same async context as the handler
+      auditStorage.enterWith(auditContext);
+      return { auditContext };
     });
 }

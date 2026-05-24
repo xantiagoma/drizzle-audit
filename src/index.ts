@@ -9,6 +9,7 @@ export {
   newDrizzleAuditContext,
   useDrizzleAuditContext,
   getDrizzleAuditContext,
+  setDrizzleAuditContext,
   addDrizzleAuditMetadata,
 } from "./context.ts";
 export { computeDiff, buildChanges } from "./diff.ts";

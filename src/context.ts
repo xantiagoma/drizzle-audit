@@ -66,6 +66,35 @@ export function useDrizzleAuditContext(): DrizzleAuditContext | null {
 }
 
 /**
+ * Set the audit context for the current async scope using `enterWith`.
+ * Unlike `withDrizzleAuditContext` (which scopes to a callback), this persists
+ * for the remainder of the current async context.
+ *
+ * Useful in GraphQL context factories, middleware that can't wrap `next()`,
+ * or any place where you need to set context imperatively.
+ *
+ * @param context - The audit context to set
+ *
+ * @example
+ * ```ts
+ * // In a GraphQL Yoga context factory
+ * context: async ({ request }) => {
+ *   setDrizzleAuditContext({
+ *     userId: session?.user?.id ?? null,
+ *     metadata: { service: "graphql" },
+ *   });
+ *   return { session };
+ * }
+ *
+ * // In a Pothos resolver
+ * setDrizzleAuditContext({ userId: ctx.user.id });
+ * ```
+ */
+export function setDrizzleAuditContext(context: DrizzleAuditContext): void {
+  auditStorage.enterWith(context);
+}
+
+/**
  * Get the current audit context. Throws if no context is active.
  * Use in code paths where context is required.
  *
