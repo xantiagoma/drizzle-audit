@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.12
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.11...v0.1.12)
+
+### 🩹 Fixes
+
+- Elysia ALS context lost when derive is async ([09741b0](https://github.com/xantiagoma/drizzle-audit/commit/09741b0))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.11
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.10...v0.1.11)
