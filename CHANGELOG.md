@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.13
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.12...v0.1.13)
+
+### 🩹 Fixes
+
+- **elysia:** Type plugin as named Elysia instance so .use() preserves consumer types ([5c1002c](https://github.com/xantiagoma/drizzle-audit/commit/5c1002c))
+
+### ❤️ Contributors
+
+- Santiago Montoya ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.12
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.11...v0.1.12)
