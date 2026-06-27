@@ -377,8 +377,12 @@ app.use(
   }),
 );
 // Exposes `auditContext` on Elysia handler context
-// ALS context set via enterWith in derive
+// ALS context set via enterWith in onBeforeHandle
 ```
+
+> The plugin is a named Elysia instance, so composing it with `.use()` preserves
+> your app's route types (Eden Treaty stays type-safe) — it does not collapse the
+> consuming app type to `any`.
 
 > **Note:** When embedding another async framework inside Elysia (e.g. GraphQL Yoga),
 > the ALS context may not propagate across the framework boundary. In that case, use

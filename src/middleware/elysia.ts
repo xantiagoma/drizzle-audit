@@ -1,3 +1,5 @@
+import { Elysia } from "elysia";
+
 import { auditStorage } from "../context.ts";
 import type { DrizzleAuditContext } from "../types.ts";
 
@@ -10,6 +12,13 @@ export interface ElysiaAuditPluginOptions {
 
 /**
  * Creates an Elysia-compatible plugin for drizzle-audit context.
+ *
+ * Returns a **named Elysia instance** (`name: "drizzle-audit"`) rather than a
+ * functional `(app) => app` plugin. This is the idiomatic Elysia plugin shape:
+ * composing it with `.use()` merges its types into the consumer and **preserves
+ * the consuming app's route types** — critical for Eden Treaty end-to-end type
+ * safety. A functional `(app: any) => any` plugin instead collapses the whole
+ * consuming `App` type to `any`. The name also enables Elysia's plugin de-dup.
  *
  * Uses two lifecycle hooks:
  * 1. `derive` (async) — resolves audit context from the request, attaches to `ctx.auditContext`
@@ -38,21 +47,20 @@ export interface ElysiaAuditPluginOptions {
  * ```
  */
 export function drizzleAuditPlugin(options: ElysiaAuditPluginOptions) {
-  return (app: any) =>
-    app
+  return (
+    new Elysia({ name: "drizzle-audit" })
       // Step 1: Resolve context (async OK — runs in derive's async scope)
-      .derive({ as: "global" }, async ({ request }: { request: Request }) => {
+      .derive({ as: "global" }, async ({ request }) => {
         const headers = Object.fromEntries(request.headers);
         const auditContext = await options.getContext({ request, headers });
         return { auditContext };
       })
-      // Step 2: Set ALS context (sync — runs in handler's async scope)
-      .onBeforeHandle(
-        { as: "global" },
-        ({ auditContext }: { auditContext: DrizzleAuditContext }) => {
-          if (auditContext) {
-            auditStorage.enterWith(auditContext);
-          }
-        },
-      );
+      // Step 2: Set ALS context (sync — runs in handler's async scope).
+      // `auditContext` is typed via the derive above, so no annotation needed.
+      .onBeforeHandle({ as: "global" }, ({ auditContext }) => {
+        if (auditContext) {
+          auditStorage.enterWith(auditContext);
+        }
+      })
+  );
 }
