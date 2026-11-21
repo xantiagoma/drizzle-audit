@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.2.0
+
+[compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.13...v0.2.0)
+
+### ✨ Highlights
+
+- **First-class `tenantId`.** Set it on the context (`withDrizzleAuditContext({ tenantId })` or the context your `drizzleAuditMiddleware` resolver returns) or per call (`drizzleAuditAction` / `trackAction` option). Every entry gets `entry.tenantId`, resolved as `context.tenantId ?? metadata.tenantId ?? null`, so setups that kept the tenant in `metadata.tenantId` see no change. `shouldAudit` receives it too.
+- **Opt-in `tenant_id` column.** `pgAuditTable("audit_log", { tenantId: true })` (also `sqliteAuditTable`, `mysqlAuditTable`) adds a nullable `tenant_id` column and a `(tenant_id, timestamp)` index; `drizzleTableStorage` fills it.
+- **`toAuditEntry(row)`.** Normalizes a row read back from any driver (PGlite/`pg`/`postgres`, SQLite, MySQL) into an `AuditEntry`: `timestamp` is always a `Date`, JSON columns are parsed, `id` is a string, snake_case keys are accepted. `AuditEntry.timestamp` stays typed as `Date`.
+- **`fallbackStorage`.** `withDrizzleAudit(db, { storage, fallbackStorage, onError })`: when a write fails, the entries are written to `fallbackStorage` first, then `onError` runs exactly as before. If the fallback fails too, `onError` receives an `AggregateError` with both errors.
+- **Docs.** README recipe for sending entries to `@xtandard/audit` (ships with that package), and JSDoc examples now import storages and transforms from their real subpath entries (`drizzle-audit/storage/*`, `drizzle-audit/transforms`).
+- **Publishing.** Releases are published from CI with npm trusted publishing (OIDC) and provenance.
+
+### 🧭 Migration
+
+No breaking API changes; upgrading needs no code changes. Things to check:
+
+1. **Want a `tenant_id` column?** It is opt-in. Pass `{ tenantId: true }` to your audit table factory and generate a migration (`drizzle-kit generate`). Without it, nothing about your table changes and the tenant is still available in `metadata.tenantId` if you set it there.
+2. **Existing `extraColumns` column named `tenantId`:** it is now filled automatically from `entry.tenantId` (context `tenantId`, else `metadata.tenantId`). Previously it stayed `null` unless you filled it yourself. If you used that column for something else, rename it.
+3. **Custom `onError` handler:** its `entries` argument now contains only the entries that passed `shouldAudit` (the ones that were actually being written), instead of the full list before sampling/filtering.
+4. **Reading rows back:** if you parse audit rows yourself (string timestamps from SQLite/MySQL, JSON text columns), you can replace that code with `toAuditEntry(row)`.
+5. **Imports from the root entry:** `drizzleTableStorage`, `consoleStorage`, `redact`, etc. were never exported from `drizzle-audit` at runtime (only the old JSDoc examples suggested it). Import them from `drizzle-audit/storage/drizzle`, `drizzle-audit/storage/console`, `drizzle-audit/transforms`, and so on.
+
+### 🚀 Enhancements
+
+- First-class tenantId and toAuditEntry for reading rows back ([#3](https://github.com/xantiagoma/drizzle-audit/pull/3))
+- FallbackStorage for entries whose write failed ([#4](https://github.com/xantiagoma/drizzle-audit/pull/4))
+
+### 📖 Documentation
+
+- Import storages and transforms from their subpaths in JSDoc examples ([#2](https://github.com/xantiagoma/drizzle-audit/pull/2))
+
+### 🤖 CI
+
+- Publish to npm with trusted publishing (OIDC) ([#1](https://github.com/xantiagoma/drizzle-audit/pull/1))
+
+### ❤️ Contributors
+
+- Santiago Montoya A. ([@xantiagoma](https://github.com/xantiagoma))
+
 ## v0.1.13
 
 [compare changes](https://github.com/xantiagoma/drizzle-audit/compare/v0.1.12...v0.1.13)
