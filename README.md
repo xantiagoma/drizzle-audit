@@ -941,6 +941,30 @@ const db = withDrizzleAudit(rawDb, {
 });
 ```
 
+### Fallback storage
+
+With `"warn"` / `"ignore"` a failed write is reported but the entries are gone. Give them somewhere to
+go with `fallbackStorage`:
+
+```ts
+import { appendFile } from "node:fs/promises";
+import { callbackStorage } from "drizzle-audit/storage/callback";
+
+const db = withDrizzleAudit(rawDb, {
+  storage: httpStorage({ url: "https://audit.internal/ingest" }),
+  fallbackStorage: callbackStorage(async (entries) => {
+    await appendFile("audit-fallback.jsonl", entries.map((e) => JSON.stringify(e) + "\n").join(""));
+  }),
+});
+```
+
+- Used for automatic auditing, batch flushes, `action()` and `track()`.
+- On a failed write the entries go to `fallbackStorage` first, then `onError` runs as usual with the
+  original error: `"throw"` still fails the operation, and `"warn"` logs
+  `Failed to write audit entries (entries written to fallbackStorage)`.
+- If the fallback fails too, `onError` receives an `AggregateError` of both errors.
+- Not set (default): behavior is unchanged.
+
 ## API Reference
 
 ### Core

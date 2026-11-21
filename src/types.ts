@@ -432,6 +432,31 @@ export interface DrizzleAuditOptions {
   transform?: AuditTransform;
   /** Error handling policy. Default: `'warn'` */
   onError?: AuditErrorHandler;
+  /**
+   * Where entries go when a write to `storage` fails, so `onError: 'warn'` / `'ignore'` /
+   * a custom handler no longer means losing them. Used by automatic auditing, batch flushes,
+   * `drizzleAuditAction` and `trackAction`.
+   *
+   * On a failed write the entries are written here first, then `onError` runs as usual with
+   * the original error (`'throw'` still fails the operation; `'warn'` says the entries were
+   * saved to the fallback). If the fallback write fails too, `onError` receives an
+   * `AggregateError` of both errors. Default: none — failed entries are only reported.
+   *
+   * @example
+   * ```ts
+   * import { appendFile } from "node:fs/promises";
+   * import { callbackStorage } from "drizzle-audit/storage/callback";
+   *
+   * const db = withDrizzleAudit(rawDb, {
+   *   storage: httpStorage({ url: "https://audit.internal/ingest" }),
+   *   // keep what the endpoint refused; replay it later
+   *   fallbackStorage: callbackStorage(async (entries) => {
+   *     await appendFile("audit-fallback.jsonl", entries.map((e) => JSON.stringify(e) + "\n").join(""));
+   *   }),
+   * });
+   * ```
+   */
+  fallbackStorage?: AuditStorage;
   /** When to write entries to storage. Default: `'immediate'` */
   flushMode?: FlushMode;
   /**

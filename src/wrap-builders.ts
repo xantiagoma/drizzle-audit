@@ -6,6 +6,7 @@ const getColumnsFromTable: (table: Table) => Record<string, any> =
 import { resolveContext, resolveTenantId } from "./context.ts";
 import { buildChanges } from "./diff.ts";
 import { generateAuditId } from "./id.ts";
+import { handleWriteFailure } from "./write-failure.ts";
 import type {
   AuditEntry,
   AuditStorage,
@@ -77,6 +78,7 @@ export interface WrapContext {
   tablesConfig: TablesConfig | undefined;
   transform: AuditTransform | undefined;
   onError: AuditErrorHandler | undefined;
+  fallbackStorage?: AuditStorage;
   batch?: { add(entries: AuditEntry[]): void };
   globalShouldAudit?: ShouldAuditFn;
   onEntry?: (entry: AuditEntry) => void | Promise<void>;
@@ -164,14 +166,13 @@ async function writeEntries(ctx: WrapContext, entries: AuditEntry[]): Promise<vo
   try {
     await ctx.storage.write(filtered);
   } catch (error) {
-    const handler = ctx.onError ?? "warn";
-    if (handler === "throw") throw error;
-    if (handler === "ignore") return;
-    if (handler === "warn") {
-      console.warn("[drizzle-audit] Failed to write audit entries:", error);
-      return;
-    }
-    handler(error, entries);
+    await handleWriteFailure(
+      error,
+      filtered,
+      ctx.onError,
+      ctx.fallbackStorage,
+      "Failed to write audit entries",
+    );
   }
 }
 

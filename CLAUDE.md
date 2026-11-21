@@ -101,6 +101,7 @@ tmp/                    — gitignored scratch/reference (not committed)
 - First-class `tenantId` on context/entries (`resolveTenantId`: `ctx.tenantId ?? metadata.tenantId`); `AuditEntry.tenantId` is optional in the type for back-compat but always set by the library
 - Schema `tenantId: true` is opt-in (adding a column to the default schema would break unmigrated tables, since Drizzle names every table column in INSERTs); `drizzleTableStorage` always passes `tenantId` (Drizzle ignores keys the table lacks)
 - Rows read back are normalized with `toAuditEntry` (Date timestamps, parsed JSON) rather than widening `AuditEntry` types
+- Failed writes go through `handleWriteFailure` (`src/write-failure.ts`): optional `fallbackStorage` first, then the unchanged `onError` policy (AggregateError if the fallback fails too)
 - `test/docs-imports.test.ts` checks every documented `drizzle-audit…` import against the real entry exports
 - `db.$audit` namespace exposes all audit functionality from the db instance
 - ALS propagation: `run()` (safe) for Hono/Express/Koa/tRPC/oRPC/Fetch/Worker; `enterWith` (fragile) for Elysia/Yoga/GraphQL
