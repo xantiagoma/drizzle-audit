@@ -20,6 +20,29 @@ TypeScript library for configurable audit logging with Drizzle ORM.
 - `bun run example:basic` — Hono + PGlite example (port auto-detected)
 - `bun run example:mongo` — Elysia + PGlite + MongoDB example
 - `bun run example:express` — Express + MySQL + SQLite example
+- `bun run release` — bump version, update CHANGELOG, commit, tag and push (`changelogen --release --push`)
+
+## Releasing
+
+`bun run release` pushes a `v*` tag; `.github/workflows/publish.yml` then builds, runs
+`npm publish --provenance --access public` and creates the GitHub release.
+
+npm auth is **trusted publishing** (OIDC) — there is no `NPM_TOKEN` secret. npmjs.com trusts this
+repo's `publish.yml`, set up once with
+
+```bash
+npm trust github drizzle-audit --repo xantiagoma/drizzle-audit --file publish.yml
+```
+
+(or npmjs.com → package Settings → Trusted Publisher). It needs npm >= 11.5.1, which the workflow
+gets from Node 24.
+
+If the publish fails after the tag is pushed, fix the cause and re-publish the same tag from the
+workflow's manual trigger (no new tag needed):
+
+```bash
+gh workflow run publish.yml -f tag=v0.1.13
+```
 
 ## Config
 
