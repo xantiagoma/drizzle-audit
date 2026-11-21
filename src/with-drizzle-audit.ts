@@ -13,6 +13,7 @@ import { _setIdGenerator } from "./id.ts";
 import { drizzleAuditAction } from "./audit-action.ts";
 import { trackAction } from "./track-action.ts";
 import { _withTxDb } from "./storage/drizzle.ts";
+import { handleWriteFailure } from "./write-failure.ts";
 import {
   wrapInsertBuilder,
   wrapUpdateBuilder,
@@ -69,7 +70,11 @@ function getDataMode(
 
 // --- Batch buffer ---
 
-function createBatchBuffer(storage: AuditStorage, onError: AuditErrorHandler | undefined) {
+function createBatchBuffer(
+  storage: AuditStorage,
+  onError: AuditErrorHandler | undefined,
+  fallbackStorage: AuditStorage | undefined,
+) {
   let buffer: AuditEntry[] = [];
   return {
     add(entries: AuditEntry[]) {
@@ -82,14 +87,13 @@ function createBatchBuffer(storage: AuditStorage, onError: AuditErrorHandler | u
       try {
         await storage.write(batch);
       } catch (error) {
-        const handler = onError ?? "warn";
-        if (handler === "throw") throw error;
-        if (handler === "ignore") return;
-        if (handler === "warn") {
-          console.warn("[drizzle-audit] Failed to write audit entries:", error);
-          return;
-        }
-        handler(error, batch);
+        await handleWriteFailure(
+          error,
+          batch,
+          onError,
+          fallbackStorage,
+          "Failed to write audit entries",
+        );
       }
     },
     get pending() {
@@ -236,7 +240,7 @@ export interface AuditedDb {
  * ```
  */
 export function withDrizzleAudit<Q>(db: Q, options: DrizzleAuditOptions): Q & AuditedDb {
-  _setGlobalStorage(options.storage, options.onError);
+  _setGlobalStorage(options.storage, options.onError, options.fallbackStorage);
   _setMetadataMerge(options.metadataMerge);
   _setComputeChanges(options.computeChanges);
   _setIdGenerator(options.idMode);
@@ -250,12 +254,14 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
     dataMode: globalDataMode,
     transform,
     onError,
+    fallbackStorage,
     shouldAudit: globalShouldAudit,
   } = options;
   // onEntry is mutable so it can be changed via $audit.setOnEntry()
   let onEntry = options.onEntry;
   const flushMode = options.flushMode ?? "immediate";
-  const batch = flushMode === "batch" ? createBatchBuffer(storage, onError) : undefined;
+  const batch =
+    flushMode === "batch" ? createBatchBuffer(storage, onError, fallbackStorage) : undefined;
 
   const excludedTables = new Set<string>();
   if (options.auditTable) {
@@ -303,6 +309,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             tablesConfig,
             transform,
             onError,
+            fallbackStorage,
             batch,
             globalShouldAudit,
             onEntry,
@@ -325,6 +332,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             tablesConfig,
             transform,
             onError,
+            fallbackStorage,
             batch,
             globalShouldAudit,
             onEntry,
@@ -347,6 +355,7 @@ function _wrapDbProxy<Q>(db: Q, options: DrizzleAuditOptions): Q {
             tablesConfig,
             transform,
             onError,
+            fallbackStorage,
             batch,
             globalShouldAudit,
             onEntry,

@@ -1,6 +1,11 @@
 import { resolveContext, resolveTenantId } from "./context.ts";
 import { generateAuditId } from "./id.ts";
-import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
+import {
+  _defaultStorage,
+  _defaultOnError,
+  _defaultFallbackStorage,
+} from "./audit-action-internal.ts";
+import { handleWriteFailure } from "./write-failure.ts";
 import type { AuditEntry, AuditStorage } from "./types.ts";
 
 /**
@@ -124,14 +129,15 @@ export function drizzleAuditAction(
 
   const onError = _defaultOnError();
 
-  return targetStorage.write([entry]).catch((error) => {
-    const handler = onError ?? "warn";
-    if (handler === "throw") throw error;
-    if (handler === "ignore") return;
-    if (handler === "warn") {
-      console.warn("[drizzle-audit] Failed to write audit action:", error);
-      return;
-    }
-    (handler as (error: unknown, entries: AuditEntry[]) => void)(error, [entry]);
-  });
+  return targetStorage
+    .write([entry])
+    .catch((error) =>
+      handleWriteFailure(
+        error,
+        [entry],
+        onError,
+        _defaultFallbackStorage(),
+        "Failed to write audit action",
+      ),
+    );
 }

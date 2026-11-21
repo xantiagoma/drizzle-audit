@@ -1,7 +1,12 @@
 import { resolveContext, resolveTenantId } from "./context.ts";
 import { generateAuditId } from "./id.ts";
-import type { AuditEntry, AuditStorage, AuditErrorHandler, DrizzleAuditContext } from "./types.ts";
-import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
+import type { AuditEntry, AuditStorage, DrizzleAuditContext } from "./types.ts";
+import {
+  _defaultStorage,
+  _defaultOnError,
+  _defaultFallbackStorage,
+} from "./audit-action-internal.ts";
+import { handleWriteFailure } from "./write-failure.ts";
 
 /**
  * Options for tracking the lifecycle of an action via {@link trackAction}.
@@ -125,6 +130,9 @@ export interface ActionTracker extends Disposable, AsyncDisposable {
 export function trackAction(options: TrackActionOptions, storage?: AuditStorage): ActionTracker {
   const targetStorage = storage ?? _defaultStorage();
   const onError = _defaultOnError();
+  const fallbackStorage = _defaultFallbackStorage();
+  const handleTrackError = (error: unknown, entries: AuditEntry[]) =>
+    handleWriteFailure(error, entries, onError, fallbackStorage, "Failed to write tracked action");
   const startTime = performance.now();
   let extraMetadata: Record<string, unknown> = {};
 
@@ -158,9 +166,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
     };
     startEntry.tenantId = tenantFor(ctx, startEntry.metadata);
 
-    targetStorage.write([startEntry]).catch((error) => {
-      handleTrackError(onError, error, [startEntry]);
-    });
+    targetStorage.write([startEntry]).catch((error) => handleTrackError(error, [startEntry]));
   }
 
   function buildEndEntry(status: "completed" | "error", error?: unknown): AuditEntry {
@@ -200,9 +206,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
     [Symbol.dispose]() {
       if (!targetStorage) return;
       const entry = buildEndEntry("completed");
-      targetStorage.write([entry]).catch((err) => {
-        handleTrackError(onError, err, [entry]);
-      });
+      targetStorage.write([entry]).catch((err) => handleTrackError(err, [entry]));
     },
 
     async [Symbol.asyncDispose]() {
@@ -211,23 +215,8 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
       try {
         await targetStorage.write([entry]);
       } catch (err) {
-        handleTrackError(onError, err, [entry]);
+        await handleTrackError(err, [entry]);
       }
     },
   };
-}
-
-function handleTrackError(
-  onError: AuditErrorHandler | undefined,
-  error: unknown,
-  entries: AuditEntry[],
-): void {
-  const handler = onError ?? "warn";
-  if (handler === "throw") throw error;
-  if (handler === "ignore") return;
-  if (handler === "warn") {
-    console.warn("[drizzle-audit] Failed to write tracked action:", error);
-    return;
-  }
-  handler(error, entries);
 }
