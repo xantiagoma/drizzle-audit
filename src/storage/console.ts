@@ -28,7 +28,8 @@ export interface ConsoleStorageOptions {
  *
  * @example
  * ```ts
- * import { withDrizzleAudit, consoleStorage } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { consoleStorage } from "drizzle-audit/storage/console";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: consoleStorage(),

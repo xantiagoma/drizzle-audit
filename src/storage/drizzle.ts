@@ -37,7 +37,8 @@ export interface DrizzleTableStorageOptions {
  * @example
  * ```ts
  * import { drizzle } from "drizzle-orm/node-postgres";
- * import { withDrizzleAudit, drizzleTableStorage } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { drizzleTableStorage } from "drizzle-audit/storage/drizzle";
  * import { auditLog } from "./schema";
  *
  * const rawDb = drizzle(pool);

@@ -14,7 +14,9 @@ const REDACTED = "[REDACTED]";
  *
  * @example
  * ```ts
- * import { withDrizzleAudit, drizzleTableStorage, redact } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { drizzleTableStorage } from "drizzle-audit/storage/drizzle";
+ * import { redact } from "drizzle-audit/transforms";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: drizzleTableStorage(auditLog, { db: rawDb }),

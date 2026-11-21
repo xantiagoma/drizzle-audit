@@ -11,7 +11,9 @@ import type { AuditTransform } from "../types.ts";
  *
  * @example
  * ```ts
- * import { withDrizzleAudit, drizzleTableStorage, omit } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { drizzleTableStorage } from "drizzle-audit/storage/drizzle";
+ * import { omit } from "drizzle-audit/transforms";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: drizzleTableStorage(auditLog, { db: rawDb }),

@@ -58,7 +58,8 @@ export interface HttpStorageOptions {
  * @example
  * ```ts
  * // Immediate delivery
- * import { withDrizzleAudit, httpStorage } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { httpStorage } from "drizzle-audit/storage/http";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: httpStorage({
