@@ -27,6 +27,18 @@ export interface SqliteAuditTableOptions {
    * ```
    */
   extraIndexes?: (table: any) => any[];
+  /**
+   * Add a nullable `tenant_id` column (`text`), keyed `tenantId`, plus a
+   * `<name>_tenant_id_idx` index on `(tenant_id, timestamp)`. `drizzleTableStorage` fills it
+   * from `AuditEntry.tenantId`. Default: `false` — tables created without it keep
+   * working (no migration needed until you opt in).
+   *
+   * @example
+   * ```ts
+   * export const auditLog = sqliteAuditTable("audit_log", { tenantId: true });
+   * ```
+   */
+  tenantId?: boolean;
 }
 
 /**
@@ -46,6 +58,10 @@ export function sqliteAuditTable(name = "audit_log", options?: SqliteAuditTableO
     idColumn = { id: text("id").primaryKey().$defaultFn(generator) };
   }
 
+  const tenantColumn: Record<string, any> = options?.tenantId
+    ? { tenantId: text("tenant_id") }
+    : {};
+
   return sqliteTable(
     name,
     {
@@ -57,6 +73,7 @@ export function sqliteAuditTable(name = "audit_log", options?: SqliteAuditTableO
       oldData: text("old_data", { mode: "json" }),
       newData: text("new_data", { mode: "json" }),
       userId: text("user_id"),
+      ...tenantColumn,
       metadata: text("metadata", { mode: "json" }),
       timestamp: text("timestamp")
         .notNull()
@@ -69,6 +86,9 @@ export function sqliteAuditTable(name = "audit_log", options?: SqliteAuditTableO
       index(`${name}_user_id_idx`).on(table.userId),
       index(`${name}_action_idx`).on(table.action),
       index(`${name}_timestamp_idx`).on(table.timestamp),
+      ...(options?.tenantId
+        ? [index(`${name}_tenant_id_idx`).on((table as any).tenantId, table.timestamp)]
+        : []),
       ...(options?.extraIndexes?.(table) ?? []),
     ],
   );

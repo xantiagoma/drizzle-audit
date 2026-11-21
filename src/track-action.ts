@@ -1,6 +1,6 @@
-import { resolveContext } from "./context.ts";
+import { resolveContext, resolveTenantId } from "./context.ts";
 import { generateAuditId } from "./id.ts";
-import type { AuditEntry, AuditStorage, AuditErrorHandler } from "./types.ts";
+import type { AuditEntry, AuditStorage, AuditErrorHandler, DrizzleAuditContext } from "./types.ts";
 import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
 
 /**
@@ -29,6 +29,11 @@ export interface TrackActionOptions {
    * value from the active audit context.
    */
   userId?: string;
+  /**
+   * The tenant the action belongs to. When provided (including `null`), overrides the
+   * tenant resolved from the active audit context.
+   */
+  tenantId?: string | null;
   /** Additional metadata to include in both the start and end audit entries. */
   metadata?: Record<string, unknown>;
 }
@@ -125,6 +130,14 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
 
   const ctx = resolveContext(options.userId !== undefined ? { userId: options.userId } : undefined);
 
+  const tenantFor = (
+    context: DrizzleAuditContext,
+    metadata: Record<string, unknown> | null,
+  ): string | null =>
+    options.tenantId !== undefined
+      ? options.tenantId
+      : resolveTenantId({ tenantId: context.tenantId, metadata });
+
   // Write START entry immediately (fire-and-forget)
   if (targetStorage) {
     const startEntry: AuditEntry = {
@@ -143,6 +156,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
         status: "started",
       },
     };
+    startEntry.tenantId = tenantFor(ctx, startEntry.metadata);
 
     targetStorage.write([startEntry]).catch((error) => {
       handleTrackError(onError, error, [startEntry]);
@@ -155,7 +169,7 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
       options.userId !== undefined ? { userId: options.userId } : undefined,
     );
 
-    return {
+    const entry: AuditEntry = {
       id: generateAuditId(),
       tableName: options.tableName ?? null,
       action: options.action,
@@ -174,6 +188,8 @@ export function trackAction(options: TrackActionOptions, storage?: AuditStorage)
         ...(error !== undefined ? { error: String(error) } : {}),
       },
     };
+    entry.tenantId = tenantFor(endCtx, entry.metadata);
+    return entry;
   }
 
   return {

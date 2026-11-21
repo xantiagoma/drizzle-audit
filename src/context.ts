@@ -120,7 +120,7 @@ export function getDrizzleAuditContext(): DrizzleAuditContext {
 
 /**
  * Run a function within an audit context scope that **merges** with any existing context.
- * `userId` is overridden only if explicitly provided. Metadata is deep merged.
+ * `userId` and `tenantId` are overridden only if explicitly provided. Metadata is deep merged.
  *
  * @param context - Partial context to merge (userId optional, metadata deep merged)
  * @param fn - The async function to run within the context
@@ -143,6 +143,8 @@ export async function withDrizzleAuditContext<T>(
     userId: context.userId !== undefined ? context.userId : (existing?.userId ?? null),
     metadata: mergeMetadata(context.metadata, existing?.metadata),
   };
+  const tenantId = context.tenantId !== undefined ? context.tenantId : existing?.tenantId;
+  if (tenantId !== undefined) merged.tenantId = tenantId;
   return auditStorage.run(merged, fn);
 }
 
@@ -204,10 +206,12 @@ export function resolveContext(explicit?: Partial<DrizzleAuditContext>): Drizzle
   const implicit = auditStorage.getStore();
 
   if (explicit?.userId !== undefined) {
-    return {
+    const resolved: DrizzleAuditContext = {
       userId: explicit.userId,
       metadata: mergeMetadata(explicit.metadata, implicit?.metadata),
     };
+    if (implicit?.tenantId !== undefined) resolved.tenantId = implicit.tenantId;
+    return resolved;
   }
 
   if (implicit) {
@@ -223,6 +227,22 @@ export function resolveContext(explicit?: Partial<DrizzleAuditContext>): Drizzle
     userId: null,
     metadata: explicit?.metadata ?? null,
   };
+}
+
+/**
+ * The tenant of a context: `tenantId` when set, else a string or number `metadata.tenantId`
+ * (how tenants were passed before `tenantId` existed), else `null`.
+ * @internal
+ */
+export function resolveTenantId(
+  ctx: Pick<DrizzleAuditContext, "tenantId" | "metadata"> | null | undefined,
+): string | null {
+  if (ctx?.tenantId != null) return ctx.tenantId;
+  const fromMetadata = ctx?.metadata?.tenantId;
+  if (typeof fromMetadata === "string" || typeof fromMetadata === "number") {
+    return String(fromMetadata);
+  }
+  return null;
 }
 
 export { auditStorage };

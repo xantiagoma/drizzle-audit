@@ -3,7 +3,7 @@ import type { Table } from "drizzle-orm";
 import * as drizzleOrm from "drizzle-orm";
 const getColumnsFromTable: (table: Table) => Record<string, any> =
   (drizzleOrm as any).getColumns ?? (drizzleOrm as any).getTableColumns;
-import { resolveContext } from "./context.ts";
+import { resolveContext, resolveTenantId } from "./context.ts";
 import { buildChanges } from "./diff.ts";
 import { generateAuditId } from "./id.ts";
 import type {
@@ -64,6 +64,7 @@ function buildAuditEntry(
     newData: dataMode === "changes-only" ? null : newData,
     timestamp: new Date(),
     userId: ctx.userId,
+    tenantId: resolveTenantId(ctx),
     metadata: ctx.metadata ?? null,
   };
 }
@@ -96,6 +97,7 @@ function checkShouldAudit(
     action,
     rowId,
     userId: ctx.userId,
+    tenantId: resolveTenantId(ctx),
     metadata: ctx.metadata ?? null,
   };
 

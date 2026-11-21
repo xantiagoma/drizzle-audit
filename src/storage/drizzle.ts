@@ -80,6 +80,10 @@ export function drizzleTableStorage(
           oldData: entry.oldData,
           newData: entry.newData,
           userId: entry.userId,
+          // Only written when the table has a tenantId column (`tenantId: true` on the schema
+          // factories, or an `extraColumns` column keyed `tenantId`); Drizzle ignores the key
+          // otherwise, so tables created before tenantId existed keep working unchanged.
+          tenantId: entry.tenantId ?? null,
           metadata: entry.metadata,
           // Don't pass timestamp — let the column's default handle it.
           // PG/MySQL: defaultNow() generates a DB-level timestamp.
