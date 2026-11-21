@@ -28,12 +28,10 @@ export interface MultiStorageOptions {
  *
  * @example
  * ```ts
- * import {
- *   withDrizzleAudit,
- *   multiStorage,
- *   drizzleTableStorage,
- *   consoleStorage,
- * } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { multiStorage } from "drizzle-audit/storage/multi";
+ * import { drizzleTableStorage } from "drizzle-audit/storage/drizzle";
+ * import { consoleStorage } from "drizzle-audit/storage/console";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: multiStorage(

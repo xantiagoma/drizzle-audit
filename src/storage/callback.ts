@@ -12,7 +12,8 @@ import type { AuditStorage, AuditEntry } from "../types.ts";
  *
  * @example
  * ```ts
- * import { withDrizzleAudit, callbackStorage } from "drizzle-audit";
+ * import { withDrizzleAudit } from "drizzle-audit";
+ * import { callbackStorage } from "drizzle-audit/storage/callback";
  *
  * const db = withDrizzleAudit(rawDb, {
  *   storage: callbackStorage(async (entries) => {
