@@ -38,6 +38,7 @@ export type DataMode = "changes-only" | "full-snapshots" | "both";
  *   newData: null,
  *   timestamp: new Date(),
  *   userId: 'admin_1',
+ *   tenantId: 'acme',
  *   metadata: { ip: '1.2.3.4' },
  * }
  *
@@ -68,6 +69,14 @@ export interface AuditEntry {
   timestamp: Date;
   /** Who performed the action, from audit context. `null` if no context is active */
   userId: string | null;
+  /**
+   * The tenant the action belongs to, from the audit context's `tenantId` (falling back to a
+   * string or number `metadata.tenantId`). `null` when there is no tenant.
+   *
+   * Optional only so entries built by hand before this field existed still type-check: every
+   * entry drizzle-audit creates sets it.
+   */
+  tenantId?: string | null;
   /** Arbitrary metadata from audit context (IP, request ID, etc.) */
   metadata: Record<string, unknown> | null;
 }
@@ -113,6 +122,7 @@ export interface AuditStorage {
  * ```ts
  * const context: DrizzleAuditContext = {
  *   userId: 'u_123',
+ *   tenantId: 'acme',
  *   metadata: { ip: '1.2.3.4', requestId: 'req_abc' },
  * }
  * ```
@@ -120,7 +130,13 @@ export interface AuditStorage {
 export interface DrizzleAuditContext {
   /** The user or actor performing the action. `null` for system/anonymous */
   userId: string | null;
-  /** Arbitrary metadata (IP, request ID, tenant, etc.) */
+  /**
+   * The tenant (organization, workspace, account…) the action belongs to. Copied to
+   * {@link AuditEntry.tenantId}. When unset, a string or number `metadata.tenantId` is used
+   * instead, so contexts that carried the tenant in metadata keep working.
+   */
+  tenantId?: string | null;
+  /** Arbitrary metadata (IP, request ID, etc.) */
   metadata?: Record<string, unknown> | null;
 }
 
@@ -166,6 +182,8 @@ export interface ShouldAuditContext {
   rowId: string | null;
   /** Current user from audit context */
   userId: string | null;
+  /** Current tenant from audit context (see {@link DrizzleAuditContext.tenantId}) */
+  tenantId?: string | null;
   /** Current metadata from audit context */
   metadata: Record<string, unknown> | null;
 }

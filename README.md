@@ -28,6 +28,7 @@
 - **Transforms** — redact, mask, hash, omit sensitive fields
 - **Pluggable storage** — same DB, different DB, HTTP webhook, MongoDB, or anything custom
 - **AsyncLocalStorage context** — automatic user/request attribution
+- **Multi-tenant** — first-class `tenantId` on context, entries, and (opt-in) the audit table
 - **Framework middleware** — Hono, Elysia, Express, Fastify, Koa, tRPC, oRPC, GraphQL, and generic WHATWG fetch
 - **Worker support** — BullMQ, Temporal, Inngest, Cloudflare Workers, cron jobs
 - **Transaction-aware** — audit writes use the same connection inside transactions
@@ -177,11 +178,14 @@ const auditLog = pgAuditTable("audit_log", { idMode: "uuidv4" });
 // Custom name
 const auditLog = pgAuditTable("app_audit");
 
+// Tenant column: nullable tenant_id + (tenant_id, timestamp) index — see Multi-Tenancy
+const auditLog = pgAuditTable("audit_log", { tenantId: true });
+
 // Serial ID + extra columns
 const auditLog = pgAuditTable("audit_log", {
   idMode: "serial",
   extraColumns: () => ({
-    tenantId: varchar("tenant_id", { length: 64 }),
+    region: varchar("region", { length: 64 }),
   }),
 });
 
@@ -195,11 +199,14 @@ const auditLog = pgAuditTable("audit_log", {
 import { index } from "drizzle-orm/pg-core";
 const auditLog = pgAuditTable("audit_log", {
   extraColumns: () => ({
-    tenantId: text("tenant_id").notNull(),
+    region: text("region"),
   }),
-  extraIndexes: (table) => [index("audit_tenant_action_idx").on(table.tenantId, table.action)],
+  extraIndexes: (table) => [index("audit_region_action_idx").on(table.region, table.action)],
 });
 ```
+
+`drizzleTableStorage` fills the built-in columns (and `tenant_id` when the table has it); extra columns
+keep their database/`$defaultFn` defaults, so make them nullable or give them a default.
 
 ## Table Scoping
 
@@ -252,7 +259,8 @@ const db = withDrizzleAudit(rawDb, {
 
 ## Context (AsyncLocalStorage)
 
-Track who performed each action. Context is always optional — without it, `userId` is `null`.
+Track who performed each action. Context is always optional — without it, `userId` (and `tenantId`)
+is `null`. See [Multi-Tenancy](#multi-tenancy) for `tenantId`.
 
 ### `withContext` — merges with existing context
 
@@ -347,6 +355,43 @@ import {
   addDrizzleAuditMetadata,
 } from "drizzle-audit";
 ```
+
+## Multi-Tenancy
+
+Put the tenant on the context — middleware resolvers return it like `userId` — and every entry gets
+it as `entry.tenantId`:
+
+```ts
+app.use(
+  "*",
+  drizzleAuditMiddleware((c) => ({
+    userId: c.get("user")?.id ?? null,
+    tenantId: c.get("org")?.id ?? null,
+    metadata: { ip: c.req.header("x-forwarded-for") },
+  })),
+);
+
+await db.insert(invoices).values({ amount: 100 }).returning();
+// → entry.tenantId === "org_123"
+```
+
+- `withContext` inherits `tenantId` and overrides it only when given (`null` clears it); `newContext`
+  starts without one.
+- `action()` / `track()` accept a `tenantId` option that overrides the context.
+- `shouldAudit` receives `ctx.tenantId` (e.g. per-tenant sampling).
+- **Backward compatible**: when `tenantId` is not set, a string or number `metadata.tenantId` is used, so
+  contexts that carried the tenant in metadata keep producing the same tenant. It stays in `metadata`
+  too.
+
+To store it in its own column, opt in on the schema factory and generate a migration (it adds a
+nullable `tenant_id` plus a `<name>_tenant_id_idx` index on `(tenant_id, timestamp)`):
+
+```ts
+export const auditLog = pgAuditTable("audit_log", { tenantId: true }); // also sqlite/mysqlAuditTable
+```
+
+`drizzleTableStorage` writes `entry.tenantId` there. Tables without the column are unaffected — no
+migration is needed until you opt in.
 
 ## Framework Middleware
 
@@ -813,6 +858,57 @@ storage: callbackStorage(async (entries) => {
 });
 ```
 
+### Recipe: send to `@xtandard/audit`
+
+[`@xtandard/audit`](https://github.com/xantiagoma/xtandard-audit) is a tenant-scoped, tamper-evident
+(hash-chained, signed checkpoints) audit log with a customer-facing viewer, exports and SIEM streaming.
+drizzle-audit captures _what changed in which row_; the bridge turns each entry into an `@xtandard/audit`
+event in the entry's tenant.
+
+> The bridge, `createDrizzleAuditStorage` from `@xtandard/audit/drizzle-audit`, ships with
+> `@xtandard/audit`, which is not published yet. See its `docs/DRIZZLE_AUDIT.md` for the full mapping
+> (actions, actors, targets, deterministic event ids) and for importing an existing audit table.
+
+```ts
+import { withDrizzleAudit } from "drizzle-audit";
+import { createDrizzleAuditStorage } from "@xtandard/audit/drizzle-audit";
+
+const db = withDrizzleAudit(rawDb, {
+  storage: createDrizzleAuditStorage(audit, {
+    tenant: (entry) => entry.tenantId, // first-class tenantId (falls back to metadata.tenantId)
+  }),
+  dataMode: "both",
+  onError: "throw", // the query fails when its audit event cannot be recorded
+});
+
+await db.$audit.withContext({ userId: "user_1", tenantId: "acme" }, async () => {
+  await db.update(invoices).set({ status: "paid" }).where(eq(invoices.id, 42)).returning();
+});
+// → @xtandard/audit event "db.invoices.update" in tenant "acme", actor user_1, target invoices:42
+```
+
+Run drizzle-audit's transforms (`redact`, `mask`, …) as usual — they apply before the bridge sees the
+entry. Use `multiStorage([drizzleTableStorage(...), createDrizzleAuditStorage(...)])` to keep your own
+table during a migration.
+
+## Reading Audit Rows (`toAuditEntry`)
+
+Drivers return audit rows in different shapes: SQLite stores `timestamp` as an ISO string, raw SQL
+returns `snake_case` keys and (depending on the driver) string timestamps and JSON as text, serial ids
+are numbers. `toAuditEntry(row)` normalizes any of these into an `AuditEntry` with a `Date` timestamp:
+
+```ts
+import { toAuditEntry } from "drizzle-audit";
+
+const entries = (await db.select().from(auditLog)).map(toAuditEntry);
+// or raw SQL: (await db.execute(sql`select * from audit_log`)).rows.map(toAuditEntry)
+```
+
+- `timestamp` → `Date` from a `Date`, ISO string, SQL `YYYY-MM-DD HH:MM:SS[.fff]` (no zone = UTC),
+  Postgres `±HH` offsets, or epoch seconds/milliseconds. Invalid values throw.
+- `changes` / `oldData` / `newData` / `metadata` → parsed when they arrive as JSON text.
+- `tenantId` → the `tenant_id` column, else `metadata.tenantId` (rows written before `tenantId` existed).
+
 ## Event Hook (`onEntry`)
 
 React to every audit entry in real-time — before it's written to storage:
@@ -934,6 +1030,7 @@ Same functionality accessible from the wrapped db instance — convenient when d
 | -------------------------------- | -------------------------------------------- |
 | `computeDiff(old, new, opts?)`   | Compute field-level diff between two objects |
 | `buildChanges(action, old, new)` | Build delta object for audit entry           |
+| `toAuditEntry(row)`              | Normalize a DB row (any driver) to an entry  |
 
 ## Alternatives
 

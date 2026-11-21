@@ -1,4 +1,4 @@
-import { resolveContext } from "./context.ts";
+import { resolveContext, resolveTenantId } from "./context.ts";
 import { generateAuditId } from "./id.ts";
 import { _defaultStorage, _defaultOnError } from "./audit-action-internal.ts";
 import type { AuditEntry, AuditStorage } from "./types.ts";
@@ -7,8 +7,8 @@ import type { AuditEntry, AuditStorage } from "./types.ts";
  * Options for recording a single custom audit action via {@link drizzleAuditAction}.
  *
  * Only `action` is required. All other fields are optional and will be set to
- * `null` when omitted. `userId` overrides the value from the active audit
- * context; all other context metadata is merged automatically.
+ * `null` when omitted. `userId` and `tenantId` override the values from the active
+ * audit context; all other context metadata is merged automatically.
  *
  * @example
  * ```ts
@@ -39,6 +39,11 @@ export interface DrizzleAuditActionOptions {
    * value from the active audit context.
    */
   userId?: string;
+  /**
+   * The tenant the action belongs to. When provided (including `null`), overrides the
+   * tenant resolved from the active audit context.
+   */
+  tenantId?: string | null;
   /** Additional metadata to merge into the entry alongside any context metadata. */
   metadata?: Record<string, unknown>;
 }
@@ -96,6 +101,10 @@ export function drizzleAuditAction(
 
   const ctx = resolveContext(options.userId !== undefined ? { userId: options.userId } : undefined);
 
+  const metadata = options.metadata
+    ? { ...ctx.metadata, ...options.metadata }
+    : (ctx.metadata ?? null);
+
   const entry: AuditEntry = {
     id: generateAuditId(),
     tableName: options.tableName ?? null,
@@ -106,7 +115,11 @@ export function drizzleAuditAction(
     newData: options.newData ?? null,
     timestamp: new Date(),
     userId: ctx.userId,
-    metadata: options.metadata ? { ...ctx.metadata, ...options.metadata } : (ctx.metadata ?? null),
+    tenantId:
+      options.tenantId !== undefined
+        ? options.tenantId
+        : resolveTenantId({ tenantId: ctx.tenantId, metadata }),
+    metadata,
   };
 
   const onError = _defaultOnError();

@@ -27,6 +27,18 @@ export interface MysqlAuditTableOptions {
    * ```
    */
   extraIndexes?: (table: any) => any[];
+  /**
+   * Add a nullable `tenant_id` column (`varchar(255)`), keyed `tenantId`, plus a
+   * `<name>_tenant_id_idx` index on `(tenant_id, timestamp)`. `drizzleTableStorage` fills it
+   * from `AuditEntry.tenantId`. Default: `false` — tables created without it keep
+   * working (no migration needed until you opt in).
+   *
+   * @example
+   * ```ts
+   * export const auditLog = mysqlAuditTable("audit_log", { tenantId: true });
+   * ```
+   */
+  tenantId?: boolean;
 }
 
 /**
@@ -48,6 +60,10 @@ export function mysqlAuditTable(name = "audit_log", options?: MysqlAuditTableOpt
     };
   }
 
+  const tenantColumn: Record<string, any> = options?.tenantId
+    ? { tenantId: varchar("tenant_id", { length: 255 }) }
+    : {};
+
   return mysqlTable(
     name,
     {
@@ -59,6 +75,7 @@ export function mysqlAuditTable(name = "audit_log", options?: MysqlAuditTableOpt
       oldData: json("old_data"),
       newData: json("new_data"),
       userId: text("user_id"),
+      ...tenantColumn,
       metadata: json("metadata"),
       timestamp: timestamp("timestamp").notNull().defaultNow(),
       ...options?.extraColumns?.(),
@@ -69,6 +86,9 @@ export function mysqlAuditTable(name = "audit_log", options?: MysqlAuditTableOpt
       index(`${name}_user_id_idx`).on(table.userId),
       index(`${name}_action_idx`).on(table.action),
       index(`${name}_timestamp_idx`).on(table.timestamp),
+      ...(options?.tenantId
+        ? [index(`${name}_tenant_id_idx`).on((table as any).tenantId, table.timestamp)]
+        : []),
       ...(options?.extraIndexes?.(table) ?? []),
     ],
   );
